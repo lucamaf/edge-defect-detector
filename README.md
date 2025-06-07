@@ -1,4 +1,6 @@
-## How to Build and Run the Container
+# Python defect detection application
+
+### How to Build and Run the Container
 
 - Step 1: Place Your Model
   Make sure your trained model file (e.g., best.pt) is inside the models directory.
