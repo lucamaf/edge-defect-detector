@@ -1,0 +1,29 @@
+# Git
+.git
+.gitignore
+README.md
+
+# Docker / Podman
+Dockerfile
+Containerfile
+
+# Python virtual environment and cache
+venv/
+__pycache__/
+*.pyc
+
+# IDE folders
+.idea/
+.vscode/
+
+# Runtime data - do not include in the image
+uploads/
+models/
+*.pt
+*.htmlv1
+
+# OS-specific files
+.DS_Store
+
+# dataset
+dataset/

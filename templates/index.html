@@ -1,0 +1,257 @@
+<!doctype html>
+<html lang="en">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>Metal Defect Detection | AI Analytics</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Red+Hat+Display:wght@400;500;700&family=Red+Hat+Text:wght@400;500&display=swap" rel="stylesheet">
+    <style>
+        :root {
+            --rh-red: #EE0000;
+            --rh-blue-400: #2B9AF3;
+            --rh-gray-900: #151515;
+            --rh-gray-800: #333333;
+            --rh-gray-100: #F0F0F0;
+            --rh-gray-50: #FAFAFA;
+            --rh-border-color: #D2D2D2;
+        }
+
+        body {
+            font-family: 'Red Hat Text', sans-serif;
+            background-color: var(--rh-gray-100);
+            color: var(--rh-gray-900);
+            margin: 0;
+            display: flex;
+            flex-direction: column;
+            min-height: 100vh;
+        }
+
+        .rh-masthead {
+            background-color: var(--rh-gray-900);
+            color: white;
+            padding: 1rem 2rem;
+            border-bottom: 4px solid var(--rh-red);
+        }
+
+        .rh-masthead h1 {
+            font-family: 'Red Hat Display', sans-serif;
+            font-weight: 500;
+            font-size: 1.5rem;
+            margin: 0;
+        }
+
+        .rh-container {
+            width: 100%;
+            max-width: 1200px;
+            margin: 2rem auto;
+            padding: 0 2rem;
+            box-sizing: border-box;
+        }
+
+        .rh-grid {
+            display: grid;
+            grid-template-columns: 2fr 1fr;
+            gap: 2rem;
+        }
+
+        .rh-card {
+            background-color: white;
+            border: 1px solid var(--rh-border-color);
+            border-radius: 3px;
+            padding: 1.5rem;
+            box-shadow: 0 1px 3px rgba(0,0,0,0.05);
+        }
+
+        .rh-card h2 {
+            font-family: 'Red Hat Display', sans-serif;
+            font-size: 1.25rem;
+            font-weight: 500;
+            margin-top: 0;
+            border-bottom: 1px solid var(--rh-gray-100);
+            padding-bottom: 0.75rem;
+            margin-bottom: 1.5rem;
+        }
+
+        #video-stream {
+            width: 100%;
+            background-color: var(--rh-gray-800);
+            border: 1px solid var(--rh-border-color);
+            border-radius: 2px;
+        }
+
+        .rh-stat-panel {
+            margin-top: 1.5rem;
+            padding: 1rem;
+            background-color: var(--rh-gray-50);
+            border-radius: 3px;
+            text-align: center;
+        }
+
+        .rh-stat-panel .label {
+            font-size: 1rem;
+            color: var(--rh-gray-800);
+        }
+
+        .rh-stat-panel .value {
+            font-family: 'Red Hat Display', sans-serif;
+            font-size: 2.5rem;
+            font-weight: 700;
+            color: var(--rh-red);
+            line-height: 1.2;
+        }
+
+        .rh-button {
+            font-family: 'Red Hat Text', sans-serif;
+            font-weight: 500;
+            display: inline-block;
+            text-decoration: none;
+            padding: 0.6rem 1.5rem;
+            border-radius: 3px;
+            border: 1px solid transparent;
+            cursor: pointer;
+            transition: all 0.2s ease-in-out;
+        }
+
+        .rh-button-primary {
+            background-color: var(--rh-red);
+            color: white;
+            width: 100%;
+        }
+
+        .rh-button-primary:hover {
+            background-color: #be0000;
+        }
+
+        .rh-form-control {
+            margin-bottom: 1rem;
+        }
+
+        .rh-form-control input[type="file"] {
+            width: 100%;
+            padding: 0.5rem;
+            border: 1px solid var(--rh-border-color);
+            border-radius: 3px;
+            box-sizing: border-box;
+            font-family: 'Red Hat Text', sans-serif;
+        }
+
+        #uploaded-result {
+            margin-top: 1.5rem;
+        }
+
+        #annotated-image {
+            max-width: 100%;
+            border: 1px solid var(--rh-border-color);
+        }
+        
+        #upload-defect-count {
+            font-weight: 500;
+            color: var(--rh-gray-900);
+            text-align: center;
+            margin-top: 1rem;
+        }
+
+        footer {
+            text-align: center;
+            padding: 1rem;
+            color: var(--rh-gray-800);
+            font-size: 0.875rem;
+            margin-top: auto;
+        }
+
+        /* Responsive adjustments */
+        @media (max-width: 992px) {
+            .rh-grid {
+                grid-template-columns: 1fr;
+            }
+        }
+    </style>
+</head>
+<body>
+    <header class="rh-masthead">
+        <h1>Metal Surface Defect Detection</h1>
+    </header>
+
+    <main class="rh-container">
+        <div class="rh-grid">
+            <section class="rh-card">
+                <h2>Live Camera Feed</h2>
+                <img id="video-stream" src="{{ url_for('video_feed') }}" alt="Live camera feed for defect detection.">
+                <div class="rh-stat-panel">
+                    <div class="label">Defects Detected in Real-Time</div>
+                    <div id="defect-counter" class="value">0</div>
+                </div>
+            </section>
+
+            <section class="rh-card">
+                <h2>Static Analysis</h2>
+                <form id="upload-form" enctype="multipart/form-data">
+                    <div class="rh-form-control">
+                        <label for="file-upload" class="sr-only">Upload Image</label>
+                        <input id="file-upload" type="file" name="file" accept="image/*">
+                    </div>
+                    <button type="submit" class="rh-button rh-button-primary">Analyze Uploaded Image</button>
+                </form>
+                <div id="uploaded-result">
+                    <img id="annotated-image" src="" alt="Annotated analysis result." style="display:none;">
+                    <p id="upload-defect-count"></p>
+                </div>
+            </section>
+        </div>
+    </main>
+
+    <footer>
+        AI Defect Detector | Control via MQTT Topic: <strong>defect_detection/control</strong> (messages: 'start'/'stop')
+    </footer>
+
+    <script>
+        // No changes needed for the JavaScript logic.
+        // It remains the same as the previous version.
+        const liveCounter = document.getElementById('defect-counter');
+        const uploadForm = document.getElementById('upload-form');
+        const annotatedImage = document.getElementById('annotated-image');
+        const uploadDefectCount = document.getElementById('upload-defect-count');
+
+        setInterval(function() {
+            fetch('/get_defect_count')
+                .then(response => response.json())
+                .then(data => {
+                    liveCounter.innerText = data.defect_count;
+                });
+        }, 1000);
+
+        uploadForm.addEventListener('submit', function(event) {
+            event.preventDefault();
+            let formData = new FormData(this);
+            annotatedImage.style.display = 'none';
+            uploadDefectCount.innerText = 'Analyzing...';
+
+            fetch('/upload_media', {
+                method: 'POST',
+                body: formData
+            })
+            .then(response => response.json())
+            .then(data => {
+                if (data.annotated_image) {
+                    annotatedImage.src = data.annotated_image + '?t=' + new Date().getTime(); // Prevent caching
+                    annotatedImage.style.display = 'block';
+                    uploadDefectCount.innerText = 'Detected Defects: ' + data.defect_count;
+                } else if (data.error) {
+                    alert('Error: ' + data.error);
+                    uploadDefectCount.innerText = '';
+                } else if(data.message) {
+                    alert(data.message);
+                    uploadDefectCount.innerText = '';
+                }
+            })
+            .catch(error => {
+                console.error('Upload failed:', error);
+                alert('An error occurred during upload.');
+                uploadDefectCount.innerText = '';
+            });
+        });
+    </script>
+</body>
+</html>

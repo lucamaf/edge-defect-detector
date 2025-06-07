@@ -1,0 +1,68 @@
+<!doctype html>
+<html lang="en">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>Metal Defect Detection</title>
+    <style>
+        body { font-family: sans-serif; }
+        .container { max-width: 800px; margin: auto; padding: 20px; }
+        #video-stream { border: 1px solid black; }
+        #defect-counter { font-size: 1.5em; font-weight: bold; }
+        #uploaded-result { margin-top: 20px; }
+        #annotated-image { max-width: 100%; }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>Real-Time Metal Defect Detection</h1>
+        <h2>Live Camera Feed</h2>
+        <img id="video-stream" src="{{ url_for('video_feed') }}" width="100%">
+        <p>Detected Defects: <span id="defect-counter">0</span></p>
+
+        <hr>
+
+        <h2>Upload Image or Video for Analysis</h2>
+        <form id="upload-form" enctype="multipart/form-data">
+            <input type="file" name="file" accept="image/*,video/*">
+            <button type="submit">Analyze</button>
+        </form>
+        <div id="uploaded-result">
+            <img id="annotated-image" src="" style="display:none;">
+            <p id="upload-defect-count"></p>
+        </div>
+    </div>
+
+    <script>
+        setInterval(function() {
+            fetch('/get_defect_count')
+                .then(response => response.json())
+                .then(data => {
+                    document.getElementById('defect-counter').innerText = data.defect_count;
+                });
+        }, 1000);
+
+        document.getElementById('upload-form').addEventListener('submit', function(event) {
+            event.preventDefault();
+            let formData = new FormData(this);
+            fetch('/upload_media', {
+                method: 'POST',
+                body: formData
+            })
+            .then(response => response.json())
+            .then(data => {
+                if (data.annotated_image) {
+                    const annotatedImage = document.getElementById('annotated-image');
+                    annotatedImage.src = data.annotated_image + '?t=' + new Date().getTime(); // Prevent caching
+                    annotatedImage.style.display = 'block';
+                    document.getElementById('upload-defect-count').innerText = 'Detected Defects: ' + data.defect_count;
+                } else if (data.error) {
+                    alert('Error: ' + data.error);
+                } else if(data.message) {
+                    alert(data.message);
+                }
+            });
+        });
+    </script>
+</body>
+</html>
