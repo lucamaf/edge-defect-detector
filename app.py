@@ -5,6 +5,7 @@ import paho.mqtt.client as mqtt
 import threading
 import time
 import os
+import numpy as np
 
 app = Flask(__name__)
 
@@ -19,10 +20,11 @@ CAM_INDEX = os.environ.get("CAM_INDEX", "/dev/video1")
 
 
 # --- Global Variables ---
-camera = None
+video_capture = None
 analysis_active = False
 detected_defects = 0
 mqtt_client = mqtt.Client(mqtt.CallbackAPIVersion.VERSION2)
+camera_lock = threading.Lock()  # To safely handle camera object access
 
 # --- YOLO Model Loading ---
 # Model is loaded only when first needed to avoid crashing if the path is invalid at startup
@@ -38,49 +40,98 @@ def get_model():
             # The app will continue to run, but analysis will not work.
     return model
 
-# --- The rest of the functions (get_camera, release_camera, generate_frames, etc.) remain the same ---
+# get and release camera when was using default usb camera as input
+#def get_camera():
+#    global camera
+#    if camera is None:
+#        # The camera index can also be an environment variable if needed
+#        camera = cv2.VideoCapture(CAM_INDEX)
+#    return camera
 
-def get_camera():
-    global camera
-    if camera is None:
-        # The camera index can also be an environment variable if needed
-        camera = cv2.VideoCapture(CAM_INDEX)
-    return camera
+#def release_camera():
+#    global camera
+#    if camera:
+#        camera.release()
+#        camera = None
 
-def release_camera():
-    global camera
-    if camera:
-        camera.release()
-        camera = None
+def create_message_frame(message):
+    """Creates a black frame with a text message."""
+    frame = np.zeros((480, 640, 3), dtype=np.uint8)
+    # Add a border
+    frame = cv2.rectangle(frame, (1, 1), (639, 479), (80, 80, 80), 1)
+    # Put the message
+    cv2.putText(frame, message, (50, 240), cv2.FONT_HERSHEY_SIMPLEX, 1, (255, 255, 255), 2, cv2.LINE_AA)
+    ret, buffer = cv2.imencode('.jpg', frame)
+    return buffer.tobytes()
+
+@app.route('/select_source', methods=['POST'])
+def select_source():
+    global video_capture
+    data = request.get_json()
+    source_type = data.get('source')
+    url = data.get('url')
+    
+    with camera_lock:
+        # Release the current capture if it exists
+        if video_capture is not None:
+            video_capture.release()
+            video_capture = None
+
+        if source_type == 'usb':
+            # Use 0 for the default USB camera. This could also be made configurable.
+            video_capture = cv2.VideoCapture(CAM_INDEX)
+            message = "Switched to Local USB Camera"
+        elif source_type == 'web' and url:
+            video_capture = cv2.VideoCapture(url)
+            message = f"Attempting to connect to stream: {url}"
+        else:
+            return jsonify({'status': 'error', 'message': 'Invalid source type or missing URL.'}), 400
+
+    return jsonify({'status': 'success', 'message': message})
 
 def generate_frames():
     global analysis_active, detected_defects
-    cam = get_camera()
+    
     while True:
-        success, frame = cam.read()
-        if not success:
-            break
-        else:
-            if analysis_active and get_model():
-                yolo_model = get_model()
-                results = yolo_model(frame, stream=True)
-                current_defects = 0
-                for r in results:
-                    boxes = r.boxes
-                    for box in boxes:
-                        x1, y1, x2, y2 = box.xyxy[0]
-                        x1, y1, x2, y2 = int(x1), int(y1), int(x2), int(y2)
-                        cv2.rectangle(frame, (x1, y1), (x2, y2), (0, 0, 255), 2)
-                        label = f"{yolo_model.names[int(box.cls)]} {box.conf.item():.2f}"
-                        cv2.putText(frame, label, (x1, y1 - 10),
-                                    cv2.FONT_HERSHEY_SIMPLEX, 0.5, (0, 0, 255), 2)
-                        current_defects += 1
-                detected_defects = current_defects
+        with camera_lock:
+            if video_capture is None:
+                frame_bytes = create_message_frame("No video source selected")
+                time.sleep(1) # Don't spam the client if no source
+                yield (b'--frame\r\n'
+                       b'Content-Type: image/jpeg\r\n\r\n' + frame_bytes + b'\r\n')
+                continue
 
-            ret, buffer = cv2.imencode('.jpg', frame)
-            frame = buffer.tobytes()
+            success, frame = video_capture.read()
+
+        if not success:
+            frame_bytes = create_message_frame("Video stream disconnected or invalid")
+            time.sleep(1) # Wait a moment before retrying
             yield (b'--frame\r\n'
-                   b'Content-Type: image/jpeg\r\n\r\n' + frame + b'\r\n')
+                   b'Content-Type: image/jpeg\r\n\r\n' + frame_bytes + b'\r\n')
+            continue
+        
+        # If analysis is active, perform detection
+        if analysis_active and get_model():
+            yolo_model = get_model()
+            results = yolo_model(frame, stream=True, verbose=False)
+            current_defects = 0
+            for r in results:
+                boxes = r.boxes
+                for box in boxes:
+                    x1, y1, x2, y2 = box.xyxy[0]
+                    x1, y1, x2, y2 = int(x1), int(y1), int(x2), int(y2)
+                    cv2.rectangle(frame, (x1, y1), (x2, y2), (0, 0, 255), 2)
+                    label = f"{yolo_model.names[int(box.cls)]} {box.conf.item():.2f}"
+                    cv2.putText(frame, label, (x1, y1 - 10),
+                                cv2.FONT_HERSHEY_SIMPLEX, 0.5, (0, 0, 255), 2)
+                    current_defects += 1
+            detected_defects = current_defects
+
+        ret, buffer = cv2.imencode('.jpg', frame)
+        frame_bytes = buffer.tobytes()
+        yield (b'--frame\r\n'
+               b'Content-Type: image/jpeg\r\n\r\n' + frame_bytes + b'\r\n')
+
 
 @app.route('/')
 def index():
@@ -132,7 +183,7 @@ def get_defect_count():
     global detected_defects
     return jsonify({'defect_count': detected_defects})
 
-def on_connect(client, userdata, flags, rc):
+def on_connect(client, userdata, flags, rc, properties):
     if rc == 0:
         print("Connected to MQTT Broker!")
         client.subscribe(MQTT_TOPIC_CONTROL)

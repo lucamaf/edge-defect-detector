@@ -17,168 +17,76 @@
             --rh-gray-50: #FAFAFA;
             --rh-border-color: #D2D2D2;
         }
-
         body {
-            font-family: 'Red Hat Text', sans-serif;
-            background-color: var(--rh-gray-100);
-            color: var(--rh-gray-900);
-            margin: 0;
-            display: flex;
-            flex-direction: column;
-            min-height: 100vh;
+            font-family: 'Red Hat Text', sans-serif; background-color: var(--rh-gray-100); color: var(--rh-gray-900);
+            margin: 0; display: flex; flex-direction: column; min-height: 100vh;
         }
-
-        .rh-masthead {
-            background-color: var(--rh-gray-900);
-            color: white;
-            padding: 1rem 2rem;
-            border-bottom: 4px solid var(--rh-red);
-        }
-
-        .rh-masthead h1 {
-            font-family: 'Red Hat Display', sans-serif;
-            font-weight: 500;
-            font-size: 1.5rem;
-            margin: 0;
-        }
-
-        .rh-container {
-            width: 100%;
-            max-width: 1200px;
-            margin: 2rem auto;
-            padding: 0 2rem;
-            box-sizing: border-box;
-        }
-
-        .rh-grid {
-            display: grid;
-            grid-template-columns: 2fr 1fr;
-            gap: 2rem;
-        }
-
-        .rh-card {
-            background-color: white;
-            border: 1px solid var(--rh-border-color);
-            border-radius: 3px;
-            padding: 1.5rem;
-            box-shadow: 0 1px 3px rgba(0,0,0,0.05);
-        }
-
+        .rh-masthead { background-color: var(--rh-gray-900); color: white; padding: 1rem 2rem; border-bottom: 4px solid var(--rh-red); }
+        .rh-masthead h1 { font-family: 'Red Hat Display', sans-serif; font-weight: 500; font-size: 1.5rem; margin: 0; }
+        .rh-container { width: 100%; max-width: 1200px; margin: 2rem auto; padding: 0 2rem; box-sizing: border-box; }
+        .rh-grid { display: grid; grid-template-columns: 2fr 1fr; gap: 2rem; }
+        .rh-grid-single-col { display: grid; grid-template-columns: 1fr; gap: 2rem; margin-bottom: 2rem; }
+        .rh-card { background-color: white; border: 1px solid var(--rh-border-color); border-radius: 3px; padding: 1.5rem; box-shadow: 0 1px 3px rgba(0,0,0,0.05); }
         .rh-card h2 {
-            font-family: 'Red Hat Display', sans-serif;
-            font-size: 1.25rem;
-            font-weight: 500;
-            margin-top: 0;
-            border-bottom: 1px solid var(--rh-gray-100);
-            padding-bottom: 0.75rem;
-            margin-bottom: 1.5rem;
+            font-family: 'Red Hat Display', sans-serif; font-size: 1.25rem; font-weight: 500; margin-top: 0;
+            border-bottom: 1px solid var(--rh-gray-100); padding-bottom: 0.75rem; margin-bottom: 1.5rem;
         }
-
-        #video-stream {
-            width: 100%;
-            background-color: var(--rh-gray-800);
-            border: 1px solid var(--rh-border-color);
-            border-radius: 2px;
-        }
-
-        .rh-stat-panel {
-            margin-top: 1.5rem;
-            padding: 1rem;
-            background-color: var(--rh-gray-50);
-            border-radius: 3px;
-            text-align: center;
-        }
-
-        .rh-stat-panel .label {
-            font-size: 1rem;
-            color: var(--rh-gray-800);
-        }
-
-        .rh-stat-panel .value {
-            font-family: 'Red Hat Display', sans-serif;
-            font-size: 2.5rem;
-            font-weight: 700;
-            color: var(--rh-red);
-            line-height: 1.2;
-        }
-
+        #video-stream { width: 100%; background-color: var(--rh-gray-800); border: 1px solid var(--rh-border-color); border-radius: 2px; min-height: 480px; }
+        .rh-stat-panel { margin-top: 1.5rem; padding: 1rem; background-color: var(--rh-gray-50); border-radius: 3px; text-align: center; }
+        .rh-stat-panel .label { font-size: 1rem; color: var(--rh-gray-800); }
+        .rh-stat-panel .value { font-family: 'Red Hat Display', sans-serif; font-size: 2.5rem; font-weight: 700; color: var(--rh-red); line-height: 1.2; }
         .rh-button {
-            font-family: 'Red Hat Text', sans-serif;
-            font-weight: 500;
-            display: inline-block;
-            text-decoration: none;
-            padding: 0.6rem 1.5rem;
-            border-radius: 3px;
-            border: 1px solid transparent;
-            cursor: pointer;
-            transition: all 0.2s ease-in-out;
+            font-family: 'Red Hat Text', sans-serif; font-weight: 500; display: inline-block; text-decoration: none;
+            padding: 0.6rem 1.5rem; border-radius: 3px; border: 1px solid transparent; cursor: pointer; transition: all 0.2s ease-in-out;
         }
-
-        .rh-button-primary {
-            background-color: var(--rh-red);
-            color: white;
-            width: 100%;
+        .rh-button-primary { background-color: var(--rh-red); color: white; width: 100%; }
+        .rh-button-primary:hover { background-color: #be0000; }
+        .rh-form-control { margin-bottom: 1rem; }
+        .rh-form-control label { font-weight: 500; display: block; margin-bottom: 0.5rem; }
+        .rh-form-control input[type="text"], .rh-form-control select {
+            width: 100%; padding: 0.6rem; border: 1px solid var(--rh-border-color); border-radius: 3px; box-sizing: border-box; font-family: 'Red Hat Text', sans-serif; font-size: 1rem;
         }
-
-        .rh-button-primary:hover {
-            background-color: #be0000;
-        }
-
-        .rh-form-control {
-            margin-bottom: 1rem;
-        }
-
-        .rh-form-control input[type="file"] {
-            width: 100%;
-            padding: 0.5rem;
-            border: 1px solid var(--rh-border-color);
-            border-radius: 3px;
-            box-sizing: border-box;
-            font-family: 'Red Hat Text', sans-serif;
-        }
-
-        #uploaded-result {
-            margin-top: 1.5rem;
-        }
-
-        #annotated-image {
-            max-width: 100%;
-            border: 1px solid var(--rh-border-color);
-        }
-        
-        #upload-defect-count {
-            font-weight: 500;
-            color: var(--rh-gray-900);
-            text-align: center;
-            margin-top: 1rem;
-        }
-
-        footer {
-            text-align: center;
-            padding: 1rem;
-            color: var(--rh-gray-800);
-            font-size: 0.875rem;
-            margin-top: auto;
-        }
-
-        /* Responsive adjustments */
-        @media (max-width: 992px) {
-            .rh-grid {
-                grid-template-columns: 1fr;
-            }
-        }
+        .rh-form-control input[type="file"] { width: 100%; padding: 0.5rem; border: 1px solid var(--rh-border-color); border-radius: 3px; box-sizing: border-box; }
+        #uploaded-result { margin-top: 1.5rem; }
+        #annotated-image { max-width: 100%; border: 1px solid var(--rh-border-color); }
+        #upload-defect-count { font-weight: 500; color: var(--rh-gray-900); text-align: center; margin-top: 1rem; }
+        .alert { padding: 1rem; margin-top: 1rem; border-radius: 3px; display: none; }
+        .alert-success { background-color: #d4edda; color: #155724; border: 1px solid #c3e6cb; }
+        .alert-error { background-color: #f8d7da; color: #721c24; border: 1px solid #f5c6cb; }
+        footer { text-align: center; padding: 1rem; color: var(--rh-gray-800); font-size: 0.875rem; margin-top: auto; }
+        @media (max-width: 992px) { .rh-grid { grid-template-columns: 1fr; } }
     </style>
 </head>
 <body>
-    <header class="rh-masthead">
-        <h1>Metal Surface Defect Detection</h1>
-    </header>
+    <header class="rh-masthead"><h1>Metal Surface Defect Detection</h1></header>
 
     <main class="rh-container">
+        <div class="rh-grid-single-col">
+            <section class="rh-card">
+                <h2>Video Source</h2>
+                <form id="source-form">
+                    <div class="rh-form-control">
+                        <label for="source-type">Source Type</label>
+                        <select id="source-type" name="source">
+                            <option value="none" selected>-- Select a Source --</option>
+                            <option value="usb">Local USB Camera</option>
+                            <option value="web">Web Stream (MJPG/URL)</option>
+                        </select>
+                    </div>
+                    <div class="rh-form-control" id="web-stream-control" style="display: none;">
+                        <label for="web-stream-url">Stream URL</label>
+                        <input type="text" id="web-stream-url" name="url" placeholder="http://192.168.1.10:8080/video">
+                    </div>
+                    <button type="submit" class="rh-button rh-button-primary">Update Video Source</button>
+                </form>
+                <div id="source-alert" class="alert"></div>
+            </section>
+        </div>
+
         <div class="rh-grid">
             <section class="rh-card">
-                <h2>Live Camera Feed</h2>
-                <img id="video-stream" src="{{ url_for('video_feed') }}" alt="Live camera feed for defect detection.">
+                <h2>Live Feed Analysis</h2>
+                <img id="video-stream" src="{{ url_for('video_feed') }}" alt="Live video feed.">
                 <div class="rh-stat-panel">
                     <div class="label">Defects Detected in Real-Time</div>
                     <div id="defect-counter" class="value">0</div>
@@ -186,10 +94,9 @@
             </section>
 
             <section class="rh-card">
-                <h2>Static Analysis</h2>
+                <h2>Static Image Analysis</h2>
                 <form id="upload-form" enctype="multipart/form-data">
                     <div class="rh-form-control">
-                        <label for="file-upload" class="sr-only">Upload Image</label>
                         <input id="file-upload" type="file" name="file" accept="image/*">
                     </div>
                     <button type="submit" class="rh-button rh-button-primary">Analyze Uploaded Image</button>
@@ -202,13 +109,65 @@
         </div>
     </main>
 
-    <footer>
-        AI Defect Detector | Control via MQTT Topic: <strong>defect_detection/control</strong> (messages: 'start'/'stop')
-    </footer>
+    <footer>AI Defect Detector | Control via MQTT Topic: <strong>defect_detection/control</strong> (messages: 'start'/'stop')</footer>
 
     <script>
-        // No changes needed for the JavaScript logic.
-        // It remains the same as the previous version.
+        const sourceForm = document.getElementById('source-form');
+        const sourceTypeSelect = document.getElementById('source-type');
+        const webStreamControl = document.getElementById('web-stream-control');
+        const webStreamUrlInput = document.getElementById('web-stream-url');
+        const videoStream = document.getElementById('video-stream');
+        const sourceAlert = document.getElementById('source-alert');
+
+        // Show/hide URL input based on selection
+        sourceTypeSelect.addEventListener('change', () => {
+            webStreamControl.style.display = sourceTypeSelect.value === 'web' ? 'block' : 'none';
+        });
+
+        // Handle source form submission
+        sourceForm.addEventListener('submit', function(event) {
+            event.preventDefault();
+            const source = sourceTypeSelect.value;
+            const url = webStreamUrlInput.value;
+
+            if (source === 'none') {
+                showAlert('Please select a valid source.', 'error');
+                return;
+            }
+            if (source === 'web' && !url) {
+                showAlert('Please enter a URL for the web stream.', 'error');
+                return;
+            }
+
+            fetch('/select_source', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ source: source, url: url })
+            })
+            .then(response => response.json())
+            .then(data => {
+                if (data.status === 'success') {
+                    showAlert(data.message, 'success');
+                    // Force the image to reload from the stream endpoint
+                    videoStream.src = '/video_feed?t=' + new Date().getTime();
+                } else {
+                    showAlert(data.message, 'error');
+                }
+            })
+            .catch(err => {
+                console.error('Error updating source:', err);
+                showAlert('An unexpected error occurred.', 'error');
+            });
+        });
+        
+        function showAlert(message, type) {
+            sourceAlert.textContent = message;
+            sourceAlert.className = 'alert'; // reset classes
+            sourceAlert.classList.add(type === 'success' ? 'alert-success' : 'alert-error');
+            sourceAlert.style.display = 'block';
+        }
+
+        // --- Existing JavaScript for defect counter and file upload remains the same ---
         const liveCounter = document.getElementById('defect-counter');
         const uploadForm = document.getElementById('upload-form');
         const annotatedImage = document.getElementById('annotated-image');
@@ -217,9 +176,7 @@
         setInterval(function() {
             fetch('/get_defect_count')
                 .then(response => response.json())
-                .then(data => {
-                    liveCounter.innerText = data.defect_count;
-                });
+                .then(data => { liveCounter.innerText = data.defect_count; });
         }, 1000);
 
         uploadForm.addEventListener('submit', function(event) {
@@ -227,15 +184,11 @@
             let formData = new FormData(this);
             annotatedImage.style.display = 'none';
             uploadDefectCount.innerText = 'Analyzing...';
-
-            fetch('/upload_media', {
-                method: 'POST',
-                body: formData
-            })
+            fetch('/upload_media', { method: 'POST', body: formData })
             .then(response => response.json())
             .then(data => {
                 if (data.annotated_image) {
-                    annotatedImage.src = data.annotated_image + '?t=' + new Date().getTime(); // Prevent caching
+                    annotatedImage.src = data.annotated_image;
                     annotatedImage.style.display = 'block';
                     uploadDefectCount.innerText = 'Detected Defects: ' + data.defect_count;
                 } else if (data.error) {
@@ -245,11 +198,6 @@
                     alert(data.message);
                     uploadDefectCount.innerText = '';
                 }
-            })
-            .catch(error => {
-                console.error('Upload failed:', error);
-                alert('An error occurred during upload.');
-                uploadDefectCount.innerText = '';
             });
         });
     </script>
