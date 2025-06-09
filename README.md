@@ -22,13 +22,13 @@ podman build -t defect-detector .
 Make sure to start first the MQTT broker (either natively or containerized like shown)
 
 ```
-podman run -d  --replace --privileged  -p 1883:1883 -v "$PWD/mosquitto/config:/mosquitto/config" -v "$PWD/mosquitto/data:/mosquitto/data" -v "$PWD/mosquitto/log:/mosquitto/log" --network kind --network shared eclipse-mosquitto
+podman run -d  --replace --privileged --name mosquitto -p 1883:1883 -v "$PWD/mosquitto/config:/mosquitto/config" -v "$PWD/mosquitto/data:/mosquitto/data" -v "$PWD/mosquitto/log:/mosquitto/log" --network kind --network shared eclipse-mosquitto
 ```
 
 ```
 podman run -d --replace --privileged \
     --name my-detector \
-    -p 8080:5000 \
+    -p 5000:5000 \
     --device /dev/video1:/dev/video1 \
     -v "$(pwd)/models":/app/models \
     -e MQTT_BROKER="192.168.1.100" \
@@ -46,12 +46,12 @@ podman run -d --replace --privileged \
 
 ### Controlling the Model with MQTT
 
-You can control the real-time defect detection on the live video stream by publishing messages to the defect_detection/control MQTT topic.
+You can control the real-time defect detection on the live video stream by publishing messages to the `defect_detection/control` MQTT topic.
 
     To start the analysis, publish the message: start
     To stop the analysis, publish the message: stop
 
-You can use any MQTT client (e.g., MQTTX, mosquitto_pub) to send these commands. The application will also publish its status (Detector online, Analysis started, Analysis stopped) to the defect_detection/status topic.
+You can use any MQTT client (e.g., MQTTX, mosquitto_pub) to send these commands. The application will also publish its status (Detector online, Analysis started, Analysis stopped) to the `defect_detection/status` topic.
 
 ### View live logs 
 

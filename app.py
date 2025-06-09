@@ -22,7 +22,7 @@ CAM_INDEX = os.environ.get("CAM_INDEX", "/dev/video1")
 camera = None
 analysis_active = False
 detected_defects = 0
-mqtt_client = mqtt.Client()
+mqtt_client = mqtt.Client(mqtt.CallbackAPIVersion.VERSION2)
 
 # --- YOLO Model Loading ---
 # Model is loaded only when first needed to avoid crashing if the path is invalid at startup

@@ -1,5 +1,8 @@
 flask
 ultralytics
-opencv-python
+#opencv-python
+opencv-python-headless
+# the following fixed the issue with ubi9 image and libGL.so.1 missing
+opencv-contrib-python-headless
 paho-mqtt
 
