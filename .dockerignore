@@ -27,3 +27,9 @@ models/
 
 # dataset
 dataset/
+
+#mosquitto conf
+mosquitto/
+
+#video directory
+recordings/
