@@ -236,7 +236,7 @@ def get_defect_count():
     global detected_defects
     return jsonify({'defect_count': detected_defects})
 
-def on_connect(client, userdata, flags, rc, properties):
+def on_connect(client, userdata, flags, rc):
     if rc == 0:
         print("Connected to MQTT Broker!")
         client.subscribe(MQTT_TOPIC_CONTROL)
