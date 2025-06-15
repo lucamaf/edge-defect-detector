@@ -1,5 +1,19 @@
 # Python defect detection application
 
+### How to Run the Application natively
+
+Make sure that the default env variables in the python app are set correctly (in particular the MQTT broker address and port) and install prerequisites then launch the application with
+
+```
+pip install -r requirements.txt
+python3 app.py
+```
+*Make sure you have started the MQTT broker first*
+
+You will find the application running at [localhost:5000](http://localhost:5000) (by default)
+
+
+
 ### How to Build and Run the Container
 
 - Step 1: Place Your Model
@@ -42,16 +56,21 @@ podman run -d --replace --privileged \
 (Replace 192.168.1.100 with your actual MQTT broker's IP address. If the broker is also a container on the same Podman network, you can use its container name.)
 
 - Step 4: Access Your Application
-  You can now open your web browser and navigate to http://localhost:8080 to see your application running.
+  You can now open your web browser and navigate to http://localhost:5000 to see your application running.
 
 ### Controlling the Model with MQTT
 
 You can control the real-time defect detection on the live video stream by publishing messages to the `defect_detection/control` MQTT topic.
 
-    To start the analysis, publish the message: start
-    To stop the analysis, publish the message: stop
+- To start the analysis, publish the message: **start**
+- To stop the analysis, publish the message: **stop**
 
 You can use any MQTT client (e.g., MQTTX, mosquitto_pub) to send these commands. The application will also publish its status (Detector online, Analysis started, Analysis stopped) to the `defect_detection/status` topic.
+
+You can now also record video from the camera using specific messages to the `defect_detection/control` MQTT topic
+
+- To start recording, publish: **start_recording**
+- To stop recording, publish: **stop_recording**
 
 ### View live logs 
 
