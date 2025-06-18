@@ -33,3 +33,6 @@ mosquitto/
 
 #video directory
 recordings/
+
+#autostart with systemd services
+autostart/

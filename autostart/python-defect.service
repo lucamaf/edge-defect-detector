@@ -1,0 +1,11 @@
+[Unit]
+Description=Python defect app
+After=network-online.target container-mqttx-web.service
+
+[Service]
+Type=simple
+Restart=on-failure
+ExecStart=/usr/bin/python /home/luca/edge-defect-detector/app.py
+
+[Install]
+WantedBy=default.target
