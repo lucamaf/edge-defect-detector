@@ -34,5 +34,8 @@ mosquitto/
 #video directory
 recordings/
 
+#static video / image analysis
+static/
+
 #autostart with systemd services
 autostart/

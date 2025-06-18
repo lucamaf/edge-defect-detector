@@ -197,4 +197,5 @@ cython_debug/
 .vscode
 dataset/
 recordings/
+static/
 mosquitto/config/mosquitto.passwd

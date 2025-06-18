@@ -12,7 +12,17 @@ python3 app.py
 
 You will find the application running at [localhost:5000](http://localhost:5000) (by default)
 
+### How to start everything automatically at system boot
+See the created files in the folder [autostart](https://github.com/lucamaf/edge-defect-detector/tree/main/autostart).
+You will find 2 systemd user services created based on the running **mosquitto** and **mqttx** containers and another service dedicated to launching the python application. 
 
+The priority is already set in the systemd definition so that:
+
+1. mosquitto
+2. mqttx
+3. python-defect-app
+
+Making sure the dependecies are correct between the 3 applications.
 
 ### How to Build and Run the Container
 
