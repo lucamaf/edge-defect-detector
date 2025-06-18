@@ -6,6 +6,7 @@ import threading
 import time
 import os
 import numpy as np
+import uuid
 
 app = Flask(__name__)
 
@@ -31,6 +32,7 @@ detected_defects = 0
 # for newer versions of paho-mqtt, use CallbackAPIVersion
 mqtt_client = mqtt.Client(client_id="defect_detection_client")
 camera_lock = threading.Lock()  # To safely handle camera object access
+upload_jobs = {} # Dictionary to store status of background jobs
 
 # --- NEW: Recording State Management ---
 is_recording = False
@@ -160,6 +162,64 @@ def generate_frames():
         yield (b'--frame\r\n'
                b'Content-Type: image/jpeg\r\n\r\n' + frame_bytes + b'\r\n')
 
+def process_video_job(job_id, input_path):
+    """
+    Processes a video in a background thread.
+    - input_path: Path to the originally uploaded video.
+    """
+    try:
+        yolo_model = get_model()
+        if not yolo_model:
+            raise Exception("Model could not be loaded.")
+            
+        cap = cv2.VideoCapture(input_path)
+        total_frames = int(cap.get(cv2.CAP_PROP_FRAME_COUNT))
+        
+        # Get video properties for the output writer
+        w = int(cap.get(cv2.CAP_PROP_FRAME_WIDTH))
+        h = int(cap.get(cv2.CAP_PROP_FRAME_HEIGHT))
+        fps = cap.get(cv2.CAP_PROP_FPS)
+        
+        # Define output path in the static folder to be web-accessible
+        output_filename = f"processed_{job_id}.mp4"
+        output_path = os.path.join('static', output_filename)
+        
+        # Create the video writer
+        fourcc = cv2.VideoWriter_fourcc(*'mp4v') # Use 'mp4v' for .mp4 files
+        writer = cv2.VideoWriter(output_path, fourcc, fps, (w, h))
+
+        upload_jobs[job_id]['status'] = 'processing'
+        
+        for frame_count in range(total_frames):
+            success, frame = cap.read()
+            if not success:
+                break
+
+            # Run YOLO detection
+            results = yolo_model(frame, verbose=False)
+            annotated_frame = results[0].plot() # .plot() returns a NumPy array with boxes drawn
+            writer.write(annotated_frame)
+            
+            # Update progress
+            progress = int(((frame_count + 1) / total_frames) * 100)
+            upload_jobs[job_id]['progress'] = progress
+
+        # Finalize the job
+        cap.release()
+        writer.release()
+        
+        upload_jobs[job_id]['status'] = 'complete'
+        upload_jobs[job_id]['result_path'] = f'/static/{output_filename}'
+        print(f"Job {job_id} completed. Output at {output_path}")
+
+    except Exception as e:
+        print(f"Error processing job {job_id}: {e}")
+        upload_jobs[job_id]['status'] = 'failed'
+        upload_jobs[job_id]['error'] = str(e)
+    finally:
+        # Clean up the original uploaded file
+        if os.path.exists(input_path):
+            os.remove(input_path)
 
 @app.route('/')
 def index():
@@ -198,38 +258,57 @@ def select_source():
 def upload_media():
     global detected_defects
     if 'file' not in request.files:
-        return jsonify({'error': 'No file part'})
+        return jsonify({'error': 'No file part'}), 400
     file = request.files['file']
     if file.filename == '':
-        return jsonify({'error': 'No selected file'})
+        return jsonify({'error': 'No selected file'}), 400
     
     yolo_model = get_model()
     if file and yolo_model:
-        if not os.path.exists('uploads'):
-            os.makedirs('uploads')
+        os.makedirs('uploads', exist_ok=True)
         filename = file.filename
         filepath = os.path.join('uploads', filename)
         file.save(filepath)
 
+        # --- IMAGE PROCESSING (remains the same) ---
         if filename.lower().endswith(('.png', '.jpg', '.jpeg')):
             results = yolo_model(filepath)
-            
-            if not os.path.exists('static'):
-                os.makedirs('static')
+            os.makedirs('static', exist_ok=True)
             
             annotated_image = results[0].plot()
             annotated_image_path = os.path.join('static', 'annotated_image.jpg')
             cv2.imwrite(annotated_image_path, annotated_image)
             
             detected_defects = len(results[0].boxes)
-            # Add a timestamp to the image url to force browser refresh
             annotated_image_url = f'/static/annotated_image.jpg?t={time.time()}'
-            return jsonify({'annotated_image': annotated_image_url, 'defect_count': detected_defects})
-        elif filename.lower().endswith(('.mp4', '.avi', '.mov')):
-            return jsonify({'message': 'Video processing not yet implemented.'})
+            os.remove(filepath) # Clean up original upload
+            return jsonify({'type': 'image', 'annotated_image': annotated_image_url, 'defect_count': detected_defects})
+        
+        # --- VIDEO PROCESSING (NEW LOGIC) ---
+        elif filename.lower().endswith(('.mp4', '.avi', '.mov', '.webm')):
+            job_id = uuid.uuid4().hex
+            
+            # Initialize job status
+            upload_jobs[job_id] = {'status': 'queued', 'progress': 0}
+            
+            # Start background thread
+            thread = threading.Thread(target=process_video_job, args=(job_id, filepath))
+            thread.daemon = True
+            thread.start()
+            
+            # Immediately return the job ID
+            return jsonify({'type': 'video', 'status': 'processing', 'job_id': job_id})
 
-    return jsonify({'error': 'Analysis failed or model not loaded.'})
+    return jsonify({'error': 'Analysis failed, model not loaded, or unsupported file type.'}), 500
 
+@app.route('/upload_status/<job_id>')
+def upload_status(job_id):
+    """Endpoint for the frontend to poll for job status."""
+    job = upload_jobs.get(job_id)
+    if job:
+        return jsonify(job)
+    else:
+        return jsonify({'status': 'not_found'}), 404
 
 @app.route('/get_defect_count')
 def get_defect_count():

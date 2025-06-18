@@ -94,16 +94,25 @@
             </section>
 
             <section class="rh-card">
-                <h2>Static Image Analysis</h2>
+                <h2>Static Analysis</h2>
                 <form id="upload-form" enctype="multipart/form-data">
                     <div class="rh-form-control">
-                        <input id="file-upload" type="file" name="file" accept="image/*">
+                        <input id="file-upload" type="file" name="file" accept="image/*,video/mp4,video/webm,video/avi,video/quicktime">
                     </div>
-                    <button type="submit" class="rh-button rh-button-primary">Analyze Uploaded Image</button>
+                    <button type="submit" class="rh-button rh-button-primary">Analyze Uploaded File</button>
                 </form>
-                <div id="uploaded-result">
-                    <img id="annotated-image" src="" alt="Annotated analysis result." style="display:none;">
-                    <p id="upload-defect-count"></p>
+
+                <div id="uploaded-result" style="margin-top: 1.5rem;">
+                    <div id="progress-container" style="display: none;">
+                        <p id="upload-status-text" style="margin-bottom: 0.5rem;"></p>
+                        <div style="background-color: var(--rh-border-color); border-radius: 5px; padding: 2px;">
+                            <div id="progress-bar" style="width: 0%; height: 20px; background-color: var(--rh-blue-400); border-radius: 3px; text-align: center; color: white; line-height: 20px;">0%</div>
+                        </div>
+                    </div>
+
+                    <img id="annotated-image" src="" alt="Annotated analysis result." style="display:none; max-width: 100%; border: 1px solid var(--rh-border-color);">
+                    <video id="annotated-video" style="display:none; max-width: 100%;" controls></video>
+                    <p id="upload-defect-count" style="font-weight: 500; text-align: center; margin-top: 1rem;"></p>
                 </div>
             </section>
         </div>
@@ -168,10 +177,15 @@
         }
 
         // --- Existing JavaScript for defect counter and file upload remains the same ---
-        const liveCounter = document.getElementById('defect-counter');
         const uploadForm = document.getElementById('upload-form');
         const annotatedImage = document.getElementById('annotated-image');
+        const annotatedVideo = document.getElementById('annotated-video');
         const uploadDefectCount = document.getElementById('upload-defect-count');
+        const progressContainer = document.getElementById('progress-container');
+        const progressBar = document.getElementById('progress-bar');
+        const uploadStatusText = document.getElementById('upload-status-text');
+        
+        let pollingInterval;
 
         setInterval(function() {
             fetch('/get_defect_count')
@@ -179,27 +193,87 @@
                 .then(data => { liveCounter.innerText = data.defect_count; });
         }, 1000);
 
+        function resetUploadUI() {
+            clearInterval(pollingInterval);
+            annotatedImage.style.display = 'none';
+            annotatedVideo.style.display = 'none';
+            annotatedVideo.src = '';
+            uploadDefectCount.innerText = '';
+            progressContainer.style.display = 'none';
+        }
+
         uploadForm.addEventListener('submit', function(event) {
             event.preventDefault();
-            let formData = new FormData(this);
-            annotatedImage.style.display = 'none';
-            uploadDefectCount.innerText = 'Analyzing...';
+            resetUploadUI();
+
+            const formData = new FormData(this);
+            if (!formData.get('file').name) {
+                alert('Please select a file to upload.');
+                return;
+            }
+            
+            uploadStatusText.innerText = 'Uploading and processing...';
+            progressContainer.style.display = 'block';
+            progressBar.style.width = '0%';
+            progressBar.innerText = '0%';
+
             fetch('/upload_media', { method: 'POST', body: formData })
-            .then(response => response.json())
+            .then(response => {
+                if (!response.ok) {
+                    throw new Error(`Server error: ${response.statusText}`);
+                }
+                return response.json();
+            })
             .then(data => {
-                if (data.annotated_image) {
+                if (data.type === 'image') {
+                    // --- Handle immediate image result ---
+                    progressContainer.style.display = 'none';
                     annotatedImage.src = data.annotated_image;
                     annotatedImage.style.display = 'block';
                     uploadDefectCount.innerText = 'Detected Defects: ' + data.defect_count;
+                } else if (data.type === 'video' && data.job_id) {
+                    // --- Handle video job by starting to poll ---
+                    pollStatus(data.job_id);
                 } else if (data.error) {
-                    alert('Error: ' + data.error);
-                    uploadDefectCount.innerText = '';
-                } else if(data.message) {
-                    alert(data.message);
-                    uploadDefectCount.innerText = '';
+                    throw new Error(data.error);
                 }
+            })
+            .catch(error => {
+                console.error('Upload failed:', error);
+                resetUploadUI();
+                uploadDefectCount.innerText = `Error: ${error.message}`;
             });
         });
+
+        function pollStatus(jobId) {
+            pollingInterval = setInterval(() => {
+                fetch(`/upload_status/${jobId}`)
+                .then(response => response.json())
+                .then(job => {
+                    if (job.status === 'processing' || job.status === 'queued') {
+                        const progress = job.progress || 0;
+                        uploadStatusText.innerText = `Processing video... Please wait.`;
+                        progressBar.style.width = progress + '%';
+                        progressBar.innerText = progress + '%';
+                    } else if (job.status === 'complete') {
+                        clearInterval(pollingInterval);
+                        progressContainer.style.display = 'none';
+                        annotatedVideo.src = job.result_path + '?t=' + new Date().getTime(); // Prevent caching
+                        annotatedVideo.style.display = 'block';
+                        uploadDefectCount.innerText = 'Video analysis complete.';
+                    } else if (job.status === 'failed') {
+                        clearInterval(polling_interval);
+                        progressContainer.style.display = 'none';
+                        uploadDefectCount.innerText = `Error processing video: ${job.error || 'Unknown error'}`;
+                    }
+                })
+                .catch(err => {
+                    clearInterval(pollingInterval);
+                    console.error('Polling error:', err);
+                    uploadDefectCount.innerText = 'Error checking status.';
+                });
+            }, 2000); // Poll every 2 seconds
+        }
     </script>
 </body>
 </html>
