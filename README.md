@@ -76,7 +76,7 @@ cp -r /ultralytics/runs/detect /ultralytics/dataset/
 
 You can find the results of running the defect detection app with the trained `best.pt` model here
 
-<video src="https://github.com/lucamaf/edge-defect-detector/blob/492b171f2835fa95dd0e59f626484fcbc43cc885/static/processed_3eb8c82a839846fca21a4f06fa3d40b4.mp4" width="320" height="240" controls></video>
+![Sample processed video (MP4)](https://github.com/lucamaf/edge-defect-detector/blob/492b171f2835fa95dd0e59f626484fcbc43cc885/static/processed_3eb8c82a839846fca21a4f06fa3d40b4.mp4)
 
 ## Setup and Installation
 ### Prerequisites
