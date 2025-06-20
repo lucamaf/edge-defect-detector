@@ -199,6 +199,10 @@ podman run -d --replace --privileged \
 
 You can control the real-time defect detection on the live video stream by publishing messages to the `defect_detection/control` MQTT topic.
 
+You can use the container MQTTX-web application to send mqtt messages to the containerized mosquitto.
+
+![alt text](images/mqttx.png)
+
 - To start the analysis, publish the message: **start**
 - To stop the analysis, publish the message: **stop**
 
