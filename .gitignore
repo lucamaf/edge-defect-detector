@@ -199,3 +199,4 @@ dataset/
 recordings/
 static/
 mosquitto/config/mosquitto.passwd
+images/

@@ -1,7 +1,79 @@
 # Python defect detection application
 
 ## How to train the model
-Use the recording functionality 
+Use the recording functionality to get a video of the scenario you want to train your model on.
+
+Using a tool like Shotcut, export the video into single frames.
+
+![alt text](images/image.png)
+
+You can now use a tool like [labelstudio](https://labelstud.io/) and start labelling the images according to the classification in classes you need.
+
+To start Label Studio as a container:
+
+```bash
+podman run -d --replace --name label-studio -e LABEL_STUDIO_LOCAL_FILES_SERVING_ENABLED=true -e LABEL_STUDIO_LOCAL_FILES_DOCUMENT_ROOT=/label-studio/files -v /home/luca/apac-ai:/label-studio/files --privileged -p 8081:8080 -v /home/luca/label-studio:/label-studio/data heartexlabs/label-studio:latest
+```
+
+Setup local storage on Label Studio like shown (check instructions [here](https://labelstud.io/guide/storage#Local-storage))
+
+![alt text](images/image1.png)
+
+We can also add a YOLO backend to help us annotate quicker [like shown](https://labelstud.io/tutorials/yolo) if needed.
+
+Let's setup the Project as object classification.
+
+![alt text](images/project1.png)
+
+![alt text](images/project2.png)
+
+![alt text](images/project3.png)
+
+After you complemented manual labelling you can export the labelled set into YOLO format
+
+![alt text](images/export.png) 
+
+Now copy the images to the `images` folder and then separate them into train and validation (follow [this process](https://www.ejtech.io/learn/train-yolo-models))
+
+You can run the training in a dedicated container starting first a dedicated ultralytics containaer like this:
+
+```bash
+sudo podman run -it --replace --name ultralytics --device nvidia.com/gpu=all --shm-size=4g --privileged -v /home/luca/dataset:/ultralytics/dataset ultralytics/ultralytics:latest-jetson-jetpack6 
+```
+
+*The shm-size parameter is to make sure the container is assigned enough shared memory to spin up enough torch workers*
+
+... and then starting the training inside the container like this (this took me approx 30 minutes on the Jetson Orin):
+
+```bash
+yolo detect train data=config.yaml model=yolo11n.pt epochs=50 imgsz=640
+```
+
+Once you completed the training in the container you should see at the end of the executiong something like this:
+
+```bash
+50 epochs completed in 0.401 hours.
+Optimizer stripped from /ultralytics/runs/detect/train/weights/last.pt, 5.5MB
+Optimizer stripped from /ultralytics/runs/detect/train/weights/best.pt, 5.5MB
+
+Validating /ultralytics/runs/detect/train/weights/best.pt...
+Ultralytics 8.3.156 🚀 Python-3.10.12 torch-2.5.0a0+872d972e41.nv24.08 CUDA:0 (Orin, 7290MiB)
+YOLO11n summary (fused): 100 layers, 2,582,542 parameters, 0 gradients, 6.3 GFLOPs
+                 Class     Images  Instances      Box(P          R      mAP50  mAP50-95): 100%|██████████| 7/7 [00:04<00:00,  1.53it/s]
+                   all        200        257      0.976      0.977      0.975      0.658
+                Defect         30         30      0.959      0.967      0.955       0.53
+                 Piece        200        227      0.993      0.987      0.995      0.786
+Speed: 0.5ms preprocess, 11.2ms inference, 0.0ms loss, 3.2ms postprocess per image
+Results saved to /ultralytics/runs/detect/train
+💡 Learn more at https://docs.ultralytics.com/modes/train
+```
+
+You can now export the trained model from the container to use it in the Python defect detection app.
+
+```bash
+cp -r /ultralytics/runs/detect /ultralytics/dataset/
+```
+
 
 ## Setup and Installation
 ### Prerequisites
