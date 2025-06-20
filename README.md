@@ -74,8 +74,9 @@ You can now export the trained model from the container to use it in the Python 
 cp -r /ultralytics/runs/detect /ultralytics/dataset/
 ```
 
-You can find the results of running the defect detection app with the trained `best.pt` model [here](static/processed_3eb8c82a839846fca21a4f06fa3d40b4.mp4)
+You can find the results of running the defect detection app with the trained `best.pt` model here
 
+<video src="static/processed_3eb8c82a839846fca21a4f06fa3d40b4.mp4" width="320" height="240" controls></video>
 
 ## Setup and Installation
 ### Prerequisites
