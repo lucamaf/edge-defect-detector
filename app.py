@@ -17,7 +17,7 @@ MQTT_TOPIC_CONTROL = os.environ.get("MQTT_TOPIC_CONTROL", "defect_detection/cont
 MQTT_TOPIC_STATUS = os.environ.get("MQTT_TOPIC_STATUS", "defect_detection/status")
 MODEL_PATH = os.environ.get("MODEL_PATH", "models/best.pt")
 FLASK_WEB_PORT = int(os.environ.get("FLASK_WEB_PORT", 5000))
-CAM_INDEX = os.environ.get("CAM_INDEX", "/dev/video1")
+CAM_INDEX = os.environ.get("CAM_INDEX", "/dev/video0")
 # Recording Configuration
 RECORDING_PATH = os.environ.get("RECORDING_PATH", "recordings")
 # FourCC is a 4-byte code used to specify the video codec.
