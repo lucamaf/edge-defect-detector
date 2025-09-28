@@ -1,0 +1,10 @@
+path: /home/luca/YOLOv8/partition
+test: test/images
+train: train/images
+val: train/images
+
+names:
+  0: Airplane
+  1: Car
+  2: Red-Hat
+  3: Scratch
