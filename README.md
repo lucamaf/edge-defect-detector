@@ -78,8 +78,8 @@ You can find the results of running the defect detection app with the trained `b
 
 [![Watch the video](https://img.youtube.com/vi/4DfhFfNF3l0/default.jpg)](https://youtu.be/4DfhFfNF3l0)
 
-
 ## Setup and Installation
+
 ### Prerequisites
 
   - Python 3.8+
@@ -88,6 +88,7 @@ You can find the results of running the defect detection app with the trained `b
   - A YOLO model file (e.g., best.pt) trained for defect detection.
 
 ### Installation
+
 1.  Clone/Download the project files
 2.  Install Python dependencies:
     ```bash
@@ -137,9 +138,6 @@ The application is configured using environment variables. This is especially im
     ```
 3.  Access the UI by navigating to [localhost:5000](http://localhost:5000).
 
-
-
-
 ### How to Build and Run the Container
 
 - Step 1: Place Your Model
@@ -147,22 +145,22 @@ The application is configured using environment variables. This is especially im
 
 - Step 2: Build the Container Image
   Open a terminal in the project root directory (/defect-detector-app/) and run:
- 
+
 ```bash
-podman build -t defect-detector .
+podman build -t localhost/defect-detector .
 ```
 
-- Step 3: Run the Container
-  Now, run the container. The command below shows how to override the environment variables and map necessary resources.
+- Step 3: Run the Container  
+  Now, run the container. The commands below shows how to override the environment variables and map necessary resources.
 
-    --device /dev/video1:/dev/video1: This maps your host's webcam into the container so OpenCV can access it.
-    -v "$(pwd)/models":/app/models: This mounts your local models directory into the container. This is the best practice for handling large model files, as it keeps them out of the image itself.
-    -p 8080:5000: This maps port 8080 on your host machine to port 5000 inside the container. You will access the UI at http://localhost:8080.
+    `--device /dev/video1:/dev/video1`: This maps your host's webcam into the container so OpenCV can access it.  
+    `-v "$(pwd)/models":/app/models`: This mounts your local models directory into the container. This is the best practice for handling large model files, as it keeps them out of the image itself.  
+    `-p 8080:5000`: This maps port 8080 on your host machine to port 5000 inside the container. You will access the UI at http://localhost:8080.
 
 Make sure to start first the MQTT broker (either natively or containerized like shown below)
 
 ```bash
-podman run -d  --replace --privileged --name mosquitto -p 1883:1883 -v "$PWD/mosquitto/config:/mosquitto/config" -v "$PWD/mosquitto/data:/mosquitto/data" -v "$PWD/mosquitto/log:/mosquitto/log" --network kind --network shared eclipse-mosquitto
+podman run -d  --replace --privileged --name mosquitto -p 1883:1883 -v "$PWD/mosquitto/config:/mosquitto/config" -v "$PWD/mosquitto/data:/mosquitto/data" -v "$PWD/mosquitto/log:/mosquitto/log" --network shared eclipse-mosquitto
 ```
 
 Now you can run the python app containerized
@@ -178,22 +176,22 @@ podman run -d --replace --privileged \
     -e FLASK_WEB_PORT="5000" \
     -e MODEL_PATH="/app/models/yolov8n.pt" \
     --network shared
-    defect-detector
+    localhost/defect-detector
 ```
 
 (Replace 192.168.1.100 with your actual MQTT broker's IP address. If the broker is also a container on the same Podman network, you can use its container name.)
 
-- Step 4: Access Your Application
+- Step 4: Access Your Application  
   You can now open your web browser and navigate to http://localhost:5000 to see your application running.
 
 ## How to Use the python defect application
+
 ### Web Interface
 
 * **Video Source:** Select either "Local USB Camera" or "Web Stream". If you select Web Stream, an input field will appear for you to enter the stream URL. Click "Update Video Source" to activate it. The live feed will appear under "Live Feed Analysis".
 * **Static Analysis:** Use the "Analyze Uploaded File" form to upload an image or a video.
     * **Images:** The result appears almost instantly.
     * **Videos:** A progress bar will appear. The application is processing the video in the background. Once complete, the annotated video will be displayed.
-
 
 ### Controlling the app with MQTT
 
@@ -214,7 +212,8 @@ You can now also record video from the camera using specific messages to the `de
 - To stop recording, publish: **stop_recording**
 
 ## Troubleshooting the app
-### View live logs 
+
+### View live logs
 
 To view logs or stop the container:
 
