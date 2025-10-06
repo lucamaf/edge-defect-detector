@@ -15,7 +15,7 @@ MQTT_BROKER = os.environ.get("MQTT_BROKER", "localhost")
 MQTT_PORT = int(os.environ.get("MQTT_PORT", 1883))
 MQTT_TOPIC_CONTROL = os.environ.get("MQTT_TOPIC_CONTROL", "defect_detection/control")
 MQTT_TOPIC_STATUS = os.environ.get("MQTT_TOPIC_STATUS", "defect_detection/status")
-MODEL_PATH = os.environ.get("MODEL_PATH", "models/best.pt")
+MODEL_PATH = os.environ.get("MODEL_PATH", "models/model.pt")
 FLASK_WEB_PORT = int(os.environ.get("FLASK_WEB_PORT", 5000))
 CAM_INDEX = os.environ.get("CAM_INDEX", "/dev/video0")
 # Recording Configuration

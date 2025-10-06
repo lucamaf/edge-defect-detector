@@ -188,6 +188,7 @@
         let pollingInterval;
 
         setInterval(function() {
+            const liveCounter = document.getElementById('defect-counter');
             fetch('/get_defect_count')
                 .then(response => response.json())
                 .then(data => { liveCounter.innerText = data.defect_count; });
