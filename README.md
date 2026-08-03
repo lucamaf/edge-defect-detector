@@ -210,6 +210,7 @@ podman run -d --replace --privileged \
     --name my-detector \
     -p 5000:5000 \
     --device /dev/video1:/dev/video1 \
+    --device nvidia.com/gpu=all \
     -v "$(pwd)/models":/app/models \
     -e MQTT_BROKER="192.168.100.245" \
     -e MQTT_PORT="1883" \
