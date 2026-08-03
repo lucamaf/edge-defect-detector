@@ -264,42 +264,47 @@ def upload_media():
         return jsonify({'error': 'No selected file'}), 400
     
     yolo_model = get_model()
-    if file and yolo_model:
-        os.makedirs('uploads', exist_ok=True)
-        filename = file.filename
-        filepath = os.path.join('uploads', filename)
-        file.save(filepath)
+    if not yolo_model:
+        app.logger.error("Upload failed: YOLO model is not loaded (MODEL_PATH=%s)", MODEL_PATH)
+        return jsonify({'error': 'Model not loaded on server'}), 500
 
-        # --- IMAGE PROCESSING (remains the same) ---
-        if filename.lower().endswith(('.png', '.jpg', '.jpeg')):
-            results = yolo_model(filepath)
-            os.makedirs('static', exist_ok=True)
-            
-            annotated_image = results[0].plot()
-            annotated_image_path = os.path.join('static', 'annotated_image.jpg')
-            cv2.imwrite(annotated_image_path, annotated_image)
-            
-            detected_defects = len(results[0].boxes)
-            annotated_image_url = f'/static/annotated_image.jpg?t={time.time()}'
-            os.remove(filepath) # Clean up original upload
-            return jsonify({'type': 'image', 'annotated_image': annotated_image_url, 'defect_count': detected_defects})
-        
-        # --- VIDEO PROCESSING (NEW LOGIC) ---
-        elif filename.lower().endswith(('.mp4', '.avi', '.mov', '.webm')):
-            job_id = uuid.uuid4().hex
-            
-            # Initialize job status
-            upload_jobs[job_id] = {'status': 'queued', 'progress': 0}
-            
-            # Start background thread
-            thread = threading.Thread(target=process_video_job, args=(job_id, filepath))
-            thread.daemon = True
-            thread.start()
-            
-            # Immediately return the job ID
-            return jsonify({'type': 'video', 'status': 'processing', 'job_id': job_id})
+    os.makedirs('uploads', exist_ok=True)
+    filename = file.filename
+    filepath = os.path.join('uploads', filename)
+    file.save(filepath)
 
-    return jsonify({'error': 'Analysis failed, model not loaded, or unsupported file type.'}), 500
+    # --- IMAGE PROCESSING (remains the same) ---
+    if filename.lower().endswith(('.png', '.jpg', '.jpeg')):
+        results = yolo_model(filepath)
+        os.makedirs('static', exist_ok=True)
+
+        annotated_image = results[0].plot()
+        annotated_image_path = os.path.join('static', 'annotated_image.jpg')
+        cv2.imwrite(annotated_image_path, annotated_image)
+
+        detected_defects = len(results[0].boxes)
+        annotated_image_url = f'/static/annotated_image.jpg?t={time.time()}'
+        os.remove(filepath) # Clean up original upload
+        return jsonify({'type': 'image', 'annotated_image': annotated_image_url, 'defect_count': detected_defects})
+
+    # --- VIDEO PROCESSING (NEW LOGIC) ---
+    if filename.lower().endswith(('.mp4', '.avi', '.mov', '.webm')):
+        job_id = uuid.uuid4().hex
+
+        # Initialize job status
+        upload_jobs[job_id] = {'status': 'queued', 'progress': 0}
+
+        # Start background thread
+        thread = threading.Thread(target=process_video_job, args=(job_id, filepath))
+        thread.daemon = True
+        thread.start()
+
+        # Immediately return the job ID
+        return jsonify({'type': 'video', 'status': 'processing', 'job_id': job_id})
+
+    app.logger.error("Upload failed: unsupported file type for filename=%r", filename)
+    os.remove(filepath)
+    return jsonify({'error': f'Unsupported file type: {filename}'}), 400
 
 @app.route('/upload_status/<job_id>')
 def upload_status(job_id):

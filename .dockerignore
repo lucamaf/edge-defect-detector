@@ -15,6 +15,7 @@ __pycache__/
 # IDE folders
 .idea/
 .vscode/
+.claude/
 
 # Runtime data - do not include in the image
 uploads/
