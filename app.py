@@ -5,6 +5,7 @@ import paho.mqtt.client as mqtt
 import threading
 import time
 import os
+import subprocess
 import numpy as np
 import uuid
 
@@ -47,9 +48,9 @@ def get_model():
     if model is None:
         try:
             model = YOLO(MODEL_PATH)
-            print(f"Successfully loaded YOLO model from {MODEL_PATH}")
-        except Exception as e:
-            print(f"Error loading YOLO model: {e}")
+            app.logger.info(f"Successfully loaded YOLO model from {MODEL_PATH}")
+        except Exception:
+            app.logger.exception(f"Error loading YOLO model from {MODEL_PATH}")
             # The app will continue to run, but analysis will not work.
     return model
 
@@ -180,13 +181,17 @@ def process_video_job(job_id, input_path):
         h = int(cap.get(cv2.CAP_PROP_FRAME_HEIGHT))
         fps = cap.get(cv2.CAP_PROP_FPS)
         
-        # Define output path in the static folder to be web-accessible
+        # Define output paths in the static folder to be web-accessible.
+        # OpenCV writes a raw mp4v file first, which browsers generally can't
+        # play back directly, then it gets transcoded to H.264 below.
+        raw_filename = f"processed_{job_id}_raw.mp4"
+        raw_path = os.path.join('static', raw_filename)
         output_filename = f"processed_{job_id}.mp4"
         output_path = os.path.join('static', output_filename)
-        
+
         # Create the video writer
         fourcc = cv2.VideoWriter_fourcc(*'mp4v') # Use 'mp4v' for .mp4 files
-        writer = cv2.VideoWriter(output_path, fourcc, fps, (w, h))
+        writer = cv2.VideoWriter(raw_path, fourcc, fps, (w, h))
 
         upload_jobs[job_id]['status'] = 'processing'
         
@@ -204,16 +209,27 @@ def process_video_job(job_id, input_path):
             progress = int(((frame_count + 1) / total_frames) * 100)
             upload_jobs[job_id]['progress'] = progress
 
-        # Finalize the job
+        # Finalize the raw capture
         cap.release()
         writer.release()
-        
+
+        # Transcode to H.264/yuv420p so browsers can actually play the result back
+        subprocess.run(
+            ['ffmpeg', '-y', '-i', raw_path, '-vcodec', 'libx264', '-pix_fmt', 'yuv420p', output_path],
+            check=True, capture_output=True, text=True,
+        )
+        os.remove(raw_path)
+
         upload_jobs[job_id]['status'] = 'complete'
         upload_jobs[job_id]['result_path'] = f'/static/{output_filename}'
-        print(f"Job {job_id} completed. Output at {output_path}")
+        app.logger.info(f"Job {job_id} completed. Output at {output_path}")
 
+    except subprocess.CalledProcessError as e:
+        app.logger.error(f"ffmpeg transcode failed for job {job_id}: {e.stderr}")
+        upload_jobs[job_id]['status'] = 'failed'
+        upload_jobs[job_id]['error'] = 'Video transcoding failed. See server logs.'
     except Exception as e:
-        print(f"Error processing job {job_id}: {e}")
+        app.logger.exception(f"Error processing job {job_id}")
         upload_jobs[job_id]['status'] = 'failed'
         upload_jobs[job_id]['error'] = str(e)
     finally:

@@ -96,6 +96,45 @@ You can find the results of running the defect detection app with the trained `b
     ```
 3.  Place your model: Put your trained `.pt` model file inside the `models/` directory.
 
+### Git LFS (model weights)
+
+`*.pt` files (`models/best.pt`, `models/yolo11n.pt`) are tracked with [Git LFS](https://git-lfs.com/) instead of being committed directly, since they're large binaries. A plain `git clone`/`git pull` on a machine without Git LFS installed will leave you with tiny text pointer files instead of real weights — this is exactly what caused the YOLO model to silently fail to load (`YOLO(MODEL_PATH)`) even though the file existed and had the right name/path.
+
+**Install Git LFS (one-time, per machine):**
+
+```bash
+sudo dnf install git-lfs   # RHEL/Fedora
+# or: sudo apt install git-lfs   # Debian/Ubuntu
+git lfs install
+```
+
+**Pull the actual model weights** (after cloning, or if you suspect you only have pointer files):
+
+```bash
+git lfs pull
+```
+
+To check whether a file is a real binary or still just an LFS pointer, look at its size or the first line:
+
+```bash
+head -c 200 models/best.pt
+# A pointer file looks like:
+#   version https://git-lfs.github.com/spec/v1
+#   oid sha256:...
+#   size 5457939
+# A real weights file will show binary/garbage output instead.
+```
+
+**Pushing a new/updated model:**
+
+```bash
+git add models/best.pt        # staged as an LFS object because of .gitattributes
+git commit -m "Update trained model weights"
+git push
+```
+
+Since `podman build`/`podman run` on the Jetson just read whatever is on disk in `models/`, always run `git lfs pull` after pulling code changes on that machine before rebuilding the container or restarting it.
+
 ### How to start everything automatically at system boot
 
 See the created files in the folder [autostart](https://github.com/lucamaf/edge-defect-detector/tree/main/autostart).
