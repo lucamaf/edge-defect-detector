@@ -1,0 +1,113 @@
+FROM registry.redhat.io/rhel9/nvidia-jetpack-for-rhel:latest
+
+
+# Unset proxy env vars
+ENV NO_PROXY=
+ENV HTTP_PROXY=
+ENV HTTPS_PROXY=
+
+# Reset dnf
+RUN dnf -y clean all && \
+    rm -rf /etc/yum.repos.d/unsigned.repo
+RUN rm -rf /etc/rhsm-host
+
+# RSHM args
+ARG RHSM_ORG
+ARG RHSM_AK
+
+RUN subscription-manager register \
+    --org "${RHSM_ORG}" \
+    --activationkey "${RHSM_AK}"
+
+# Enable repos
+RUN dnf  --releasever=9.8 \
+    --enablerepo=rhel-9-for-aarch64-baseos-rpms \
+    --enablerepo=rhel-9-for-aarch64-appstream-rpms \
+    --enablerepo=rhocp-4.22-for-rhel-9-aarch64-rpms \
+    --enablerepo=fast-datapath-for-rhel-9-aarch64-rpms \
+    install -y NetworkManager-wifi iwl* git vim cockpit cockpit-podman firewalld lorax \
+    && dnf clean all
+
+# Install NVIDIA container toolkit
+# netavark is required for podman network to work
+RUN curl -s -L https://nvidia.github.io/libnvidia-container/stable/rpm/nvidia-container-toolkit.repo | \
+    sudo tee /etc/yum.repos.d/nvidia-container-toolkit.repo && \
+    sudo dnf -y install \
+      netavark \
+      nvidia-container-toolkit && \
+    sudo dnf clean all
+
+# Create and enable a systemd service to generate the NVIDIA CDI YAML file
+RUN cat <<EOF > /etc/systemd/system/nvidia-cdi.service
+[Unit]
+Description=Generate the nvidia cdi yaml file
+Requires=multi-user.target
+Requires=systemd-modules-load.service
+After=multi-user.target
+After=systemd-modules-load.service
+
+[Service]
+Type=oneshot
+ExecStartPre=bash -c "echo 1 > /dev/nvgpu/igpu0/power"
+ExecStart=nvidia-ctk cdi generate --output=/etc/cdi/nvidia.yaml
+RemainAfterExit=yes
+
+[Install]
+WantedBy=multi-user.target
+EOF
+RUN systemctl enable nvidia-cdi
+
+
+# Configure Podman to use netavark as the network backend
+RUN sed -i 's/#network_backend = ""/network_backend = "netavark"/' /usr/share/containers/containers.conf
+# Create a symlink for 'docker' to 'podman'
+# to provide compatibility with docker-compose
+RUN ln -sr /usr/bin/podman /usr/bin/docker
+# Enable the Podman socket
+RUN systemctl enable podman.socket
+
+
+
+# Add kernel arguments for Jetson devices
+# disable selinux, and set the correct console device
+RUN cat <<EOF > /usr/lib/bootc/kargs.d/10-jetson.toml
+kargs = ["enforcing=0", "console=ttyTCU0,115200"]
+EOF
+
+
+
+########### CUSTOMIZATIONS ###########
+## adding podman-compose, NetworkManager wifi, iwlwifi firmware, python3-pip, cockpit packages
+## https://docs.fedoraproject.org/en-US/fedora-coreos/sysconfig-enabling-wifi/
+ RUN dnf -y install https://dl.fedoraproject.org/pub/epel/epel-release-latest-9.noarch.rpm && \
+     dnf -y install pciutils usbutils python3-pip podman-compose NetworkManager-wifi iwl* git vim cockpit cockpit-podman firewalld lorax && \
+     dnf -y clean all && \
+     rm -rf /var/{cache,log} /var/lib/{dnf,rhsm} && \
+     systemctl enable podman.service && \
+     systemctl enable cockpit.socket
+
+
+# adding and configuring Tailscale for VPN access
+RUN dnf config-manager -y --add-repo https://pkgs.tailscale.com/stable/rhel/9/tailscale.repo && \
+    dnf -y install tailscale && \
+    dnf -y clean all
+RUN systemctl enable tailscaled
+
+# enable tailscale port 
+RUN firewall-offline-cmd --add-port=41641/udp
+
+# Flightctl CLI and agent
+RUN dnf config-manager --add-repo https://rpm.flightctl.io/flightctl-epel.repo
+RUN dnf install -y \
+    flightctl-agent \
+    flightctl-cli \
+    && dnf clean all
+
+# Enable agent
+RUN systemctl enable flightctl-agent.service
+
+# Disable auto-updating
+RUN systemctl mask bootc-fetch-apply-updates.timer
+
+#checks for errors in building
+RUN bootc container lint

@@ -123,11 +123,16 @@ You can find the results of running the defect detection app with the trained `b
   *For Jetson Jetson Orin Nano:*  
   `$ sudo ./flash.sh p3768-0000-p3767-0000-a0-qspi external`  
   When the QSPI firmware flashing completes, the device will reboot.
+8. You should now see the minor version updated:  
+   `$ cat /etc/nv_tegra_release`  
+  `# R36 (release), REVISION: 5.0, GCID: 43688277, BOARD: generic, EABI: aarch64, DATE: Fri Jan 16 03:50:45 UTC 2026`
 
+### Installing RHEL ImageMode 9.8 on Nvidia Jetson
 
+Follow [these instructions](https://access.redhat.com/solutions/7140448) and build a dedicated boot ISO with [Containerfile.ImageMode](Containerfile.ImageMode).  
+You will notice this includes both **Tailscale** client (mesh VPN) and **Flightctl** (to enroll the Device to **Red Hat Edge Manager**)
 
-
-### Installation
+### Running the app natively
 
 1.  Clone/Download the project files
 2.  Install Python dependencies:
@@ -229,13 +234,11 @@ The application is configured using environment variables. This is especially im
 podman build -t localhost/defect-detector -f Containerfile .
 ```
 
-To build instead the version that is based on libraries already compiled for **Jetson GPU** and that can leverage natively Nvidia device on the Jetson:
+To build instead the version that is based on libraries already compiled for **Jetson GPU** and that can leverage natively Nvidia device on the Jetson (we are using `sudo` since we will be running the container as such):
 
 ```bash
-podman build -t localhost/defect-detector-jetson -f Containerfile.jetson .
+sudo podman build -t localhost/defect-detector-jetson -f Containerfile.jetson .
 ```
-
-
 
 - Step 3: Run the Container  
   Now, run the container. The commands below shows how to override the environment variables and map necessary resources.
@@ -244,17 +247,17 @@ podman build -t localhost/defect-detector-jetson -f Containerfile.jetson .
     `-v "$(pwd)/models":/app/models`: This mounts your local models directory into the container. This is the best practice for handling large model files, as it keeps them out of the image itself.  
     `-p 8080:5000`: This maps port 8080 on your host machine to port 5000 inside the container. You will access the UI at http://localhost:8080.
 
-Make sure to start first the MQTT broker (either natively or containerized like shown below). Since both containers need to see each other they should be on the same podman network `shared`.
+Make sure to start first the MQTT broker (either natively or containerized like shown below).
 
 ```bash
-podman run -d  --replace --privileged --name mosquitto -p 1883:1883 -v "$PWD/mosquitto/config:/mosquitto/config" -v "$PWD/mosquitto/data:/mosquitto/data" -v "$PWD/mosquitto/log:/mosquitto/log" --network shared docker.io/library/eclipse-mosquitto
+podman run -d  --replace --privileged --name mosquitto -p 1883:1883 -v "$PWD/mosquitto/config:/mosquitto/config" -v "$PWD/mosquitto/data:/mosquitto/data" -v "$PWD/mosquitto/log:/mosquitto/log" docker.io/library/eclipse-mosquitto
 ```
 
 Should you want to check that the mqtt broker is running fine, connect remotely or locally using MQTTX and subscribe to system topic tree: `$SYS\#`  
-Now you can run the python app containerized (the following is the command that leverages **Nvidia GPU**)  
+Now you can run the python app containerized (the following is the command that leverages **Nvidia GPU** and the `defect-detector-jetson` built image)  
 
 ```bash
-podman run -d --replace --privileged \
+sudo podman run -d --replace --privileged \
     --security-opt label=disable \
     --name my-detector \
     --device nvidia.com/gpu=all \
@@ -266,11 +269,10 @@ podman run -d --replace --privileged \
     -e MQTT_PORT="1883" \
     -e FLASK_WEB_PORT="5000" \
     -e MODEL_PATH="/app/models/best.pt" \
-    --network shared \
     localhost/defect-detector-jetson
 ```
 
-(Replace 192.168.100.245 with your actual MQTT broker's IP address. If the broker is also a container on the same Podman network, you can use its container name.)
+(Replace 192.168.100.245 with your actual MQTT broker's IP address)
 
 - Step 4: Access Your Application  
   You can now open your web browser and navigate to http://localhost:5000 to see your application running.
