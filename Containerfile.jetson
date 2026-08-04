@@ -6,7 +6,7 @@
 # to CPU). This base image already ships a JetPack-matched torch/torchvision/ultralytics/
 # opencv build with working CUDA support, so we deliberately do NOT install requirements.txt
 # on top of it -- doing so would reinstall generic wheels and undo the GPU support.
-FROM ultralytics/ultralytics:latest-jetson-jetpack6
+FROM docker.io/ultralytics/ultralytics:latest-jetson-jetpack6
 
 # ffmpeg is needed to transcode processed video output to H.264 for browser playback
 # (not included in the base image).

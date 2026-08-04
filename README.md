@@ -82,10 +82,50 @@ You can find the results of running the defect detection app with the trained `b
 
 ### Prerequisites
 
+  - Nvidia Jetson Orin Nano Dev Kit with Jetpack 6.2+ (Jetson Linux 36.5+)
   - Python 3.8+
   - pip package manager
   - An MQTT broker (like Mosquitto) accessible on the network.
   - A YOLO model file (e.g., best.pt) trained for defect detection.
+
+### Flashing your Nvidia device to latest Jetpack
+
+1. Grab the latest Jetson Linux tar file (v36 can be found [here](https://developer.nvidia.com/embedded/jetson-linux-r365))
+2. Set the Nvidia platform in Recovery Mode: connect female to female cable between pin 9 and 10 (FC REC - GND)
+3. Install the following packages on the RHEL host that is connected via USB-C recovery cable to Nvidia device: `sudo dnf install minicom dtc binutils usbutils lz4`
+4. Connect your RHEL host computer to the appropriate USB port on your Jetson developer kit (make sure of the side of the USB-C cable plugged into the Nvidia Device).
+5. Open a terminal window on your host computer and enter command `lsusb`. The Jetson module is in Force Recovery Mode if you see the message:  
+    `Bus <bbb> Device <ddd>: ID 0955: <nnnn> Nvidia Corp.`  
+    Where:  
+      - <bbb> is any three-digit number.  
+      - <ddd> is any three-digit number.  
+      - <nnnn> is a four-digit number that represents the type of your Jetson module:  
+          . 7023 for Jetson AGX Orin (P3701-0000 with 32GB)  
+          . 7023 for Jetson AGX Orin (P3701-0005 with 64GB)  
+          . 7023 for Jetson AGX Orin Industrial (P3701-0008 with 64GB)  
+          . 7223 for Jetson AGX Orin (P3701-0004 with 32GB)  
+          . 7323 for Jetson Orin NX (P3767-0000 with 16GB)  
+          . 7423 for Jetson Orin NX (P3767-0001 with 8GB)  
+          . 7523 for Jetson Orin Nano (P3767-0003 and P3767-0005 with 8GB)  
+          . 7623 for Jetson Orin Nano (P3767-0004 with 4GB)  
+6. Proper power and USB [connection sequence](https://www.youtube.com/watch?v=q4fGac-nrTI&t=183s):
+    - Remove the power cable from the Jetson device.
+    - Connect the jumper between FC REC and GND pins.
+    - Plug in the power cable to turn on the device.
+    - Connect the USB Type-C cable between the Jetson and the host computer.
+7. Create a directory to extract this file:
+    `$ mkdir ${HOME}/nvidia-jetson`
+   Extract both files to the same created directory in order to start flashing:  
+    `$ tar xf Jetson_Linux_R36.5.0_aarch64.tbz2 -C ${HOME}/nvidia-jetson/`  
+  Change the directory context to the directory where the flash.sh script is present:  
+  `$ cd ${HOME}/nvidia-jetson/Linux_for_Tegra/`  
+  Flash the QSPI firmware which holds NVIDIA Jetson bootloaders.  
+  *For Jetson Jetson Orin Nano:*  
+  `$ sudo ./flash.sh p3768-0000-p3767-0000-a0-qspi external`  
+  When the QSPI firmware flashing completes, the device will reboot.
+
+
+
 
 ### Installation
 
@@ -183,11 +223,19 @@ The application is configured using environment variables. This is especially im
   Make sure your trained model file (e.g., best.pt) is inside the models directory.
 
 - Step 2: Build the Container Image
-  Open a terminal in the project root directory (/defect-detector-app/) and run:
+  Open a terminal in the project root directory (/defect-detector-app/) and run (to build the **CPU** version of the app):
 
 ```bash
-podman build -t localhost/defect-detector .
+podman build -t localhost/defect-detector -f Containerfile .
 ```
+
+To build instead the version that is based on libraries already compiled for **Jetson GPU** and that can leverage natively Nvidia device on the Jetson:
+
+```bash
+podman build -t localhost/defect-detector-jetson -f Containerfile.jetson .
+```
+
+
 
 - Step 3: Run the Container  
   Now, run the container. The commands below shows how to override the environment variables and map necessary resources.
@@ -203,21 +251,23 @@ podman run -d  --replace --privileged --name mosquitto -p 1883:1883 -v "$PWD/mos
 ```
 
 Should you want to check that the mqtt broker is running fine, connect remotely or locally using MQTTX and subscribe to system topic tree: `$SYS\#`  
-Now you can run the python app containerized
+Now you can run the python app containerized (the following is the command that leverages **Nvidia GPU**)  
 
 ```bash
 podman run -d --replace --privileged \
+    --security-opt label=disable \
     --name my-detector \
+    --device nvidia.com/gpu=all \
+    --shm-size=1g \
     -p 5000:5000 \
     --device /dev/video1:/dev/video1 \
-    --device nvidia.com/gpu=all \
     -v "$(pwd)/models":/app/models \
     -e MQTT_BROKER="192.168.100.245" \
     -e MQTT_PORT="1883" \
     -e FLASK_WEB_PORT="5000" \
     -e MODEL_PATH="/app/models/best.pt" \
     --network shared \
-    localhost/defect-detector
+    localhost/defect-detector-jetson
 ```
 
 (Replace 192.168.100.245 with your actual MQTT broker's IP address. If the broker is also a container on the same Podman network, you can use its container name.)
