@@ -253,8 +253,9 @@ Make sure to start first the MQTT broker (either natively or containerized like 
 podman run -d  --replace --privileged --name mosquitto -p 1883:1883 -v "$PWD/mosquitto/config:/mosquitto/config" -v "$PWD/mosquitto/data:/mosquitto/data" -v "$PWD/mosquitto/log:/mosquitto/log" docker.io/library/eclipse-mosquitto
 ```
 
-Should you want to check that the mqtt broker is running fine, connect remotely or locally using MQTTX and subscribe to system topic tree: `$SYS\#`  
-Now you can run the python app containerized (the following is the command that leverages **Nvidia GPU** and the `defect-detector-jetson` built image)  
+Should you want to check that the mqtt broker is running fine, connect remotely or locally using MQTT Explorer and subscribe to system topic tree: `$SYS\#`  
+Now you can run the python app containerized (the following is the command that leverages **Nvidia GPU** and the `defect-detector-jetson` built image). 
+> **_NOTE:_** The model is injected at runtime and not build time, so that you can switch the model quickly, without rebuilding.  
 
 ```bash
 sudo podman run -d --replace --privileged \
@@ -277,34 +278,42 @@ sudo podman run -d --replace --privileged \
 - Step 4: Access Your Application  
   You can now open your web browser and navigate to http://<NVIDIA-DEVICE-IP-ADDRESS>:5000 to see your application running. Make sure to open port 5000 on the Nvidia jetson firewall.  
 
-## How to Use the python defect application
-
 ### Web Interface
 
-* **Video Source:** Select either "Local USB Camera" or "Web Stream". If you select Web Stream, an input field will appear for you to enter the stream URL. Click "Update Video Source" to activate it. The live feed will appear under "Live Feed Analysis".
+* **Video Source:** Select either "Local USB Camera" or "Web Stream". If you select Web Stream, an input field will appear for you to enter the stream URL. Click "Update Video Source" to activate it. The live feed will appear under "Live Feed Analysis". If you select "Local USB Camera" it will pickup the device you passthrough with the podman command, you might need to refresh the page to visualize the stream.  
 * **Static Analysis:** Use the "Analyze Uploaded File" form to upload an image or a video.
     * **Images:** The result appears almost instantly.
     * **Videos:** A progress bar will appear. The application is processing the video in the background. Once complete, the annotated video will be displayed.
 
-### Remote access to MQTT broker
+### Remote access to MQTT broker  
+You can use any MQTT client for such purpose, in my case I'm using MQTT Explorer.  
+You can find the example connnection parameters in the picture ![connection-config](images/mqtt-explorer.png)
+In my case port 1883 is open and reachable from the MQTT Explorer app.  
+You can use the container MQTT Explorer application to send MQTT messages to the containerized mosquitto we started earlier.  
+
+### Controlling the app with the GUI
+Once the USB camera is selected and streaming you can enable the real-time model with the switch you see at the top of the screen ![toggle](images/switch.png).  
+This works likes an ON/OFF button and behind that MQTT messages are being sent to enable and disable the detection.  
 
 
 ### Controlling the app with MQTT
 
 You can control the real-time defect detection on the live video stream by publishing messages to the `defect_detection/control` MQTT topic.
-TODO DESCRIBRE BETTER
-
-You can use the container MQTTX-web application to send mqtt messages to the containerized mosquitto.
 
 ![alt text](images/mqttx.png)
-
+TOPIC **defect_detection/control**  
 - To start the analysis, publish the message: **start**
 - To stop the analysis, publish the message: **stop**
 
-You can use any MQTT client (e.g., MQTTX, mosquitto_pub) to send these commands. The application will also publish its status (Detector online, Analysis started, Analysis stopped) to the `defect_detection/status` topic.
+You can use any MQTT client (e.g., MQTTX, mosquitto_pub) to send these commands. 
+Once started the application will also publish its status (*Detector online*, *Analysis started*, *Analysis stopped*) to the `defect_detection/status` topic.
+
+TOPIC **defect_detection/status**
+- view status of analysis  
 
 You can now also record video from the camera using specific messages to the `defect_detection/control` MQTT topic
 
+TOPIC **defect_detection/control**  
 - To start recording, publish: **start_recording**
 - To stop recording, publish: **stop_recording**
 

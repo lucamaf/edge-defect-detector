@@ -18,6 +18,7 @@ __pycache__/
 .claude/
 
 # Runtime data - do not include in the image
+# copied at runtime from the host machine models directory
 uploads/
 models/
 *.pt
