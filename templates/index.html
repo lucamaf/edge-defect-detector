@@ -47,6 +47,14 @@
             width: 100%; padding: 0.6rem; border: 1px solid var(--rh-border-color); border-radius: 3px; box-sizing: border-box; font-family: 'Red Hat Text', sans-serif; font-size: 1rem;
         }
         .rh-form-control input[type="file"] { width: 100%; padding: 0.5rem; border: 1px solid var(--rh-border-color); border-radius: 3px; box-sizing: border-box; }
+        .rh-switch-control { display: flex; align-items: center; justify-content: space-between; }
+        .rh-switch-control label:first-child { margin-bottom: 0; }
+        .rh-switch { position: relative; display: inline-block; width: 48px; height: 26px; flex-shrink: 0; }
+        .rh-switch input { opacity: 0; width: 0; height: 0; }
+        .rh-switch-slider { position: absolute; cursor: pointer; top: 0; left: 0; right: 0; bottom: 0; background-color: var(--rh-border-color); transition: 0.2s; border-radius: 26px; }
+        .rh-switch-slider:before { position: absolute; content: ""; height: 20px; width: 20px; left: 3px; bottom: 3px; background-color: white; transition: 0.2s; border-radius: 50%; }
+        .rh-switch input:checked + .rh-switch-slider { background-color: var(--rh-red); }
+        .rh-switch input:checked + .rh-switch-slider:before { transform: translateX(22px); }
         #uploaded-result { margin-top: 1.5rem; }
         #annotated-image { max-width: 100%; border: 1px solid var(--rh-border-color); }
         #upload-defect-count { font-weight: 500; color: var(--rh-gray-900); text-align: center; margin-top: 1rem; }
@@ -86,6 +94,13 @@
         <div class="rh-grid">
             <section class="rh-card">
                 <h2>Live Feed Analysis</h2>
+                <div class="rh-form-control rh-switch-control">
+                    <label for="analysis-toggle">Detection Model <span id="analysis-status-text" style="font-weight:400;color:var(--rh-gray-800);">(off)</span></label>
+                    <label class="rh-switch">
+                        <input type="checkbox" id="analysis-toggle">
+                        <span class="rh-switch-slider"></span>
+                    </label>
+                </div>
                 <img id="video-stream" src="{{ url_for('video_feed') }}" alt="Live video feed.">
                 <div class="rh-stat-panel">
                     <div class="label">Defects Detected in Real-Time</div>
@@ -113,6 +128,22 @@
                     <img id="annotated-image" src="" alt="Annotated analysis result." style="display:none; max-width: 100%; border: 1px solid var(--rh-border-color);">
                     <video id="annotated-video" style="display:none; max-width: 100%;" controls></video>
                     <p id="upload-defect-count" style="font-weight: 500; text-align: center; margin-top: 1rem;"></p>
+                </div>
+            </section>
+        </div>
+
+        <div class="rh-grid-single-col">
+            <section class="rh-card">
+                <h2>Analysis Performance</h2>
+                <div class="rh-grid" style="grid-template-columns: 1fr 1fr;">
+                    <div class="rh-stat-panel">
+                        <div class="label">Frames Analyzed</div>
+                        <div id="frames-analyzed-counter" class="value">0</div>
+                    </div>
+                    <div class="rh-stat-panel">
+                        <div class="label">Processing Speed</div>
+                        <div id="fps-counter" class="value">0 <span style="font-size:1rem;">fps</span></div>
+                    </div>
                 </div>
             </section>
         </div>
@@ -187,11 +218,33 @@
         
         let pollingInterval;
 
+        const analysisToggle = document.getElementById('analysis-toggle');
+        const analysisStatusText = document.getElementById('analysis-status-text');
+
+        analysisToggle.addEventListener('change', function() {
+            fetch('/toggle_analysis', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ active: analysisToggle.checked })
+            })
+            .catch(err => console.error('Failed to toggle analysis:', err));
+        });
+
         setInterval(function() {
             const liveCounter = document.getElementById('defect-counter');
+            const framesAnalyzedCounter = document.getElementById('frames-analyzed-counter');
+            const fpsCounter = document.getElementById('fps-counter');
             fetch('/get_defect_count')
                 .then(response => response.json())
-                .then(data => { liveCounter.innerText = data.defect_count; });
+                .then(data => {
+                    liveCounter.innerText = data.defect_count;
+                    framesAnalyzedCounter.innerText = data.frames_analyzed;
+                    fpsCounter.innerHTML = data.fps + ' <span style="font-size:1rem;">fps</span>';
+                    // Reflects ground truth -- setting .checked programmatically does not
+                    // re-fire 'change', so this can't loop back into the toggle handler.
+                    analysisToggle.checked = data.analysis_active;
+                    analysisStatusText.innerText = data.analysis_active ? '(on)' : '(off)';
+                });
         }, 1000);
 
         function resetUploadUI() {

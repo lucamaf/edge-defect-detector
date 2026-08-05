@@ -195,5 +195,6 @@ cython_debug/
 .cursorindexingignore
 
 .vscode
+.claude
 dataset/
 mosquitto/config/mosquitto.passwd

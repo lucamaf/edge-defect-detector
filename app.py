@@ -8,6 +8,7 @@ import os
 import subprocess
 import numpy as np
 import uuid
+from collections import deque
 
 app = Flask(__name__)
 
@@ -30,6 +31,9 @@ VIDEO_FPS = 20.0 # Frames per second for the output video
 video_capture = None
 analysis_active = False
 detected_defects = 0
+frames_analyzed = 0
+# Timestamps of the last N analyzed frames, used to compute a rolling FPS.
+analysis_frame_times = deque(maxlen=30)
 # for newer versions of paho-mqtt, use CallbackAPIVersion
 mqtt_client = mqtt.Client(client_id="defect_detection_client")
 camera_lock = threading.Lock()  # To safely handle camera object access
@@ -53,6 +57,15 @@ def get_model():
             app.logger.exception(f"Error loading YOLO model from {MODEL_PATH}")
             # The app will continue to run, but analysis will not work.
     return model
+
+def get_analysis_fps():
+    """Rolling FPS over the last few analyzed frames."""
+    if len(analysis_frame_times) < 2:
+        return 0.0
+    elapsed = analysis_frame_times[-1] - analysis_frame_times[0]
+    if elapsed <= 0:
+        return 0.0
+    return (len(analysis_frame_times) - 1) / elapsed
 
 # get and release camera when was using default usb camera as input
 #def get_camera():
@@ -81,7 +94,7 @@ def create_message_frame(message):
 # generate frames from the video capture 
 # includes recording logic
 def generate_frames():
-    global analysis_active, detected_defects, video_writer, is_recording
+    global analysis_active, detected_defects, video_writer, is_recording, frames_analyzed
     
     while True:
         with camera_lock:
@@ -156,6 +169,8 @@ def generate_frames():
                                 cv2.FONT_HERSHEY_SIMPLEX, 0.5, (0, 0, 255), 2)
                     current_defects += 1
             detected_defects = current_defects
+            frames_analyzed += 1
+            analysis_frame_times.append(time.time())
 
         # encode and yield the frame for streaming 
         ret, buffer = cv2.imencode('.jpg', frame)
@@ -333,8 +348,30 @@ def upload_status(job_id):
 
 @app.route('/get_defect_count')
 def get_defect_count():
-    global detected_defects
-    return jsonify({'defect_count': detected_defects})
+    return jsonify({
+        'defect_count': detected_defects,
+        'analysis_active': analysis_active,
+        'frames_analyzed': frames_analyzed,
+        'fps': round(get_analysis_fps(), 1),
+    })
+
+@app.route('/toggle_analysis', methods=['POST'])
+def toggle_analysis():
+    global analysis_active
+    data = request.get_json(silent=True) or {}
+    active = bool(data.get('active'))
+    command = "start" if active else "stop"
+
+    if mqtt_client.is_connected():
+        # Publish the same control message an external MQTT client would send, so
+        # on_message() stays the single place that flips analysis_active.
+        mqtt_client.publish(MQTT_TOPIC_CONTROL, command)
+    else:
+        # Broker unreachable: fall back to toggling locally so the switch still works.
+        analysis_active = active
+        app.logger.warning("MQTT broker not connected; toggled analysis locally without publishing")
+
+    return jsonify({'status': 'ok', 'active': active})
 
 def on_connect(client, userdata, flags, rc):
     if rc == 0:

@@ -143,7 +143,7 @@ You will notice this includes both **Tailscale** client (mesh VPN) and **Flightc
 
 ### Git LFS (model weights)
 
-`*.pt` files (`models/best.pt`, `models/yolo11n.pt`) are tracked with [Git LFS](https://git-lfs.com/) instead of being committed directly, since they're large binaries. A plain `git clone`/`git pull` on a machine without Git LFS installed will leave you with tiny text pointer files instead of real weights — this is exactly what caused the YOLO model to silently fail to load (`YOLO(MODEL_PATH)`) even though the file existed and had the right name/path.
+`*.pt` files (`models/best.pt`, `models/yolo11n.pt`) are tracked with [Git LFS](https://git-lfs.com/) instead of being committed directly, since they're large binaries. A plain `git clone`/`git pull` on a machine without Git LFS installed will leave you with tiny text pointer files instead of real weights — this is what can cause the YOLO model to silently fail to load (`YOLO(MODEL_PATH)`) even though the file exists and has the right name/path.
 
 **Install Git LFS (one-time, per machine):**
 
@@ -275,7 +275,7 @@ sudo podman run -d --replace --privileged \
 (Replace 192.168.100.245 with your actual MQTT broker's IP address)
 
 - Step 4: Access Your Application  
-  You can now open your web browser and navigate to http://localhost:5000 to see your application running.
+  You can now open your web browser and navigate to http://<NVIDIA-DEVICE-IP-ADDRESS>:5000 to see your application running. Make sure to open port 5000 on the Nvidia jetson firewall.  
 
 ## How to Use the python defect application
 
@@ -286,9 +286,13 @@ sudo podman run -d --replace --privileged \
     * **Images:** The result appears almost instantly.
     * **Videos:** A progress bar will appear. The application is processing the video in the background. Once complete, the annotated video will be displayed.
 
+### Remote access to MQTT broker
+
+
 ### Controlling the app with MQTT
 
 You can control the real-time defect detection on the live video stream by publishing messages to the `defect_detection/control` MQTT topic.
+TODO DESCRIBRE BETTER
 
 You can use the container MQTTX-web application to send mqtt messages to the containerized mosquitto.
 
