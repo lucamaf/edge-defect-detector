@@ -8,7 +8,9 @@ import os
 import subprocess
 import numpy as np
 import uuid
+import json
 from collections import deque
+from datetime import datetime
 
 app = Flask(__name__)
 
@@ -17,6 +19,7 @@ MQTT_BROKER = os.environ.get("MQTT_BROKER", "localhost")
 MQTT_PORT = int(os.environ.get("MQTT_PORT", 1883))
 MQTT_TOPIC_CONTROL = os.environ.get("MQTT_TOPIC_CONTROL", "defect_detection/control")
 MQTT_TOPIC_STATUS = os.environ.get("MQTT_TOPIC_STATUS", "defect_detection/status")
+MQTT_TOPIC_RESULTS = os.environ.get("MQTT_TOPIC_RESULTS", "defect_detection/results")
 MODEL_PATH = os.environ.get("MODEL_PATH", "models/model.pt")
 FLASK_WEB_PORT = int(os.environ.get("FLASK_WEB_PORT", 5000))
 CAM_INDEX = os.environ.get("CAM_INDEX", "/dev/video0")
@@ -30,6 +33,11 @@ VIDEO_FPS = 20.0 # Frames per second for the output video
 # --- Global Variables ---
 video_capture = None
 analysis_active = False
+# Set to request a single-frame ("discrete") analysis; cleared automatically once
+# that frame has been processed. Mutually exclusive with analysis_active.
+discrete_requested = False
+# Progressive counter, incremented once per discrete analysis result.
+piece_counter = 0
 detected_defects = 0
 frames_analyzed = 0
 # Timestamps of the last N analyzed frames, used to compute a rolling FPS.
@@ -81,6 +89,31 @@ def get_analysis_fps():
 #        camera.release()
 #        camera = None
 
+def run_detection_on_frame(frame, yolo_model):
+    """Runs YOLO detection on a frame, draws boxes in-place, and returns (defect_count, max_confidence)."""
+    results = yolo_model(frame, verbose=False)
+    boxes = results[0].boxes
+    max_confidence = 0.0
+    for box in boxes:
+        x1, y1, x2, y2 = box.xyxy[0]
+        x1, y1, x2, y2 = int(x1), int(y1), int(x2), int(y2)
+        confidence = box.conf.item()
+        cv2.rectangle(frame, (x1, y1), (x2, y2), (0, 0, 255), 2)
+        label = f"{yolo_model.names[int(box.cls)]} {confidence:.2f}"
+        cv2.putText(frame, label, (x1, y1 - 10),
+                    cv2.FONT_HERSHEY_SIMPLEX, 0.5, (0, 0, 255), 2)
+        max_confidence = max(max_confidence, confidence)
+    return len(boxes), max_confidence
+
+def publish_discrete_result(defective, confidence, piece):
+    payload = json.dumps({
+        'defective': defective,
+        'confidence': round(confidence, 3),
+        'timestamp': datetime.now().isoformat(timespec='seconds'),
+        'piece': piece,
+    })
+    mqtt_client.publish(MQTT_TOPIC_RESULTS, payload)
+
 def create_message_frame(message):
     """Creates a black frame with a text message."""
     frame = np.zeros((480, 640, 3), dtype=np.uint8)
@@ -95,6 +128,7 @@ def create_message_frame(message):
 # includes recording logic
 def generate_frames():
     global analysis_active, detected_defects, video_writer, is_recording, frames_analyzed
+    global discrete_requested, piece_counter
     
     while True:
         with camera_lock:
@@ -153,24 +187,26 @@ def generate_frames():
                 status_message = "Recording stopped."
                 print(status_message)
                 mqtt_client.publish(MQTT_TOPIC_STATUS, status_message)
-        # If analysis is active, perform detection
+        # If continuous analysis is active, perform detection on every frame
         if analysis_active and get_model():
             yolo_model = get_model()
-            results = yolo_model(frame, stream=True, verbose=False)
-            current_defects = 0
-            for r in results:
-                boxes = r.boxes
-                for box in boxes:
-                    x1, y1, x2, y2 = box.xyxy[0]
-                    x1, y1, x2, y2 = int(x1), int(y1), int(x2), int(y2)
-                    cv2.rectangle(frame, (x1, y1), (x2, y2), (0, 0, 255), 2)
-                    label = f"{yolo_model.names[int(box.cls)]} {box.conf.item():.2f}"
-                    cv2.putText(frame, label, (x1, y1 - 10),
-                                cv2.FONT_HERSHEY_SIMPLEX, 0.5, (0, 0, 255), 2)
-                    current_defects += 1
+            current_defects, _ = run_detection_on_frame(frame, yolo_model)
             detected_defects = current_defects
             frames_analyzed += 1
             analysis_frame_times.append(time.time())
+
+        # A discrete request analyzes exactly one frame, then clears itself
+        elif discrete_requested and get_model():
+            yolo_model = get_model()
+            current_defects, max_confidence = run_detection_on_frame(frame, yolo_model)
+            detected_defects = current_defects
+            frames_analyzed += 1
+            analysis_frame_times.append(time.time())
+
+            piece_counter += 1
+            publish_discrete_result(current_defects > 0, max_confidence, piece_counter)
+            discrete_requested = False
+            mqtt_client.publish(MQTT_TOPIC_STATUS, "Discrete analysis complete")
 
         # encode and yield the frame for streaming 
         ret, buffer = cv2.imencode('.jpg', frame)
@@ -351,13 +387,14 @@ def get_defect_count():
     return jsonify({
         'defect_count': detected_defects,
         'analysis_active': analysis_active,
+        'discrete_active': discrete_requested,
         'frames_analyzed': frames_analyzed,
         'fps': round(get_analysis_fps(), 1),
     })
 
 @app.route('/toggle_analysis', methods=['POST'])
 def toggle_analysis():
-    global analysis_active
+    global analysis_active, discrete_requested
     data = request.get_json(silent=True) or {}
     active = bool(data.get('active'))
     command = "start" if active else "stop"
@@ -369,7 +406,29 @@ def toggle_analysis():
     else:
         # Broker unreachable: fall back to toggling locally so the switch still works.
         analysis_active = active
+        if active:
+            discrete_requested = False  # mutually exclusive with continuous mode
         app.logger.warning("MQTT broker not connected; toggled analysis locally without publishing")
+
+    return jsonify({'status': 'ok', 'active': active})
+
+@app.route('/toggle_discrete', methods=['POST'])
+def toggle_discrete():
+    global analysis_active, discrete_requested
+    data = request.get_json(silent=True) or {}
+    active = bool(data.get('active'))
+    command = "discrete-on" if active else "discrete-off"
+
+    if mqtt_client.is_connected():
+        # Publish the same control message an external MQTT client would send, so
+        # on_message() stays the single place that flips discrete_requested.
+        mqtt_client.publish(MQTT_TOPIC_CONTROL, command)
+    else:
+        # Broker unreachable: fall back to toggling locally so the switch still works.
+        if active:
+            analysis_active = False  # mutually exclusive with continuous mode
+        discrete_requested = active
+        app.logger.warning("MQTT broker not connected; toggled discrete analysis locally without publishing")
 
     return jsonify({'status': 'ok', 'active': active})
 
@@ -382,15 +441,23 @@ def on_connect(client, userdata, flags, rc):
         print(f"Failed to connect, return code {rc}\n")
 
 def on_message(client, userdata, msg):
-    global analysis_active, is_recording
+    global analysis_active, is_recording, discrete_requested
     payload = msg.payload.decode()
     print(f"Received message on topic {msg.topic}: {payload}")
     if payload == "start":
         analysis_active = True
+        discrete_requested = False  # mutually exclusive with discrete mode
         client.publish(MQTT_TOPIC_STATUS, "Analysis started")
     elif payload == "stop":
         analysis_active = False
         client.publish(MQTT_TOPIC_STATUS, "Analysis stopped")
+    elif payload == "discrete-on":
+        analysis_active = False  # mutually exclusive with continuous mode
+        discrete_requested = True
+        client.publish(MQTT_TOPIC_STATUS, "Discrete analysis requested")
+    elif payload == "discrete-off":
+        discrete_requested = False
+        client.publish(MQTT_TOPIC_STATUS, "Discrete analysis cancelled")
     # recording MQTT Commands
     elif payload == "start_recording":
         with recording_lock:

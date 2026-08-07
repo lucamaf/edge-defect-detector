@@ -101,6 +101,13 @@
                         <span class="rh-switch-slider"></span>
                     </label>
                 </div>
+                <div class="rh-form-control rh-switch-control">
+                    <label for="discrete-toggle">Discrete Analysis <span id="discrete-status-text" style="font-weight:400;color:var(--rh-gray-800);">(off)</span></label>
+                    <label class="rh-switch">
+                        <input type="checkbox" id="discrete-toggle">
+                        <span class="rh-switch-slider"></span>
+                    </label>
+                </div>
                 <img id="video-stream" src="{{ url_for('video_feed') }}" alt="Live video feed.">
                 <div class="rh-stat-panel">
                     <div class="label">Defects Detected in Real-Time</div>
@@ -149,7 +156,7 @@
         </div>
     </main>
 
-    <footer>AI Defect Detector | Control via MQTT Topic: <strong>defect_detection/control</strong> (messages: 'start'/'stop')</footer>
+    <footer>AI Defect Detector | Control via MQTT Topic: <strong>defect_detection/control</strong> (messages: 'start'/'stop'/'discrete-on'/'discrete-off') | Results: <strong>defect_detection/results</strong></footer>
 
     <script>
         const sourceForm = document.getElementById('source-form');
@@ -220,14 +227,36 @@
 
         const analysisToggle = document.getElementById('analysis-toggle');
         const analysisStatusText = document.getElementById('analysis-status-text');
+        const discreteToggle = document.getElementById('discrete-toggle');
+        const discreteStatusText = document.getElementById('discrete-status-text');
 
         analysisToggle.addEventListener('change', function() {
+            if (analysisToggle.checked) {
+                // mutually exclusive with discrete mode -- reflect it immediately,
+                // the next poll will confirm it from the server anyway.
+                discreteToggle.checked = false;
+                discreteStatusText.innerText = '(off)';
+            }
             fetch('/toggle_analysis', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({ active: analysisToggle.checked })
             })
             .catch(err => console.error('Failed to toggle analysis:', err));
+        });
+
+        discreteToggle.addEventListener('change', function() {
+            if (discreteToggle.checked) {
+                // mutually exclusive with continuous mode
+                analysisToggle.checked = false;
+                analysisStatusText.innerText = '(off)';
+            }
+            fetch('/toggle_discrete', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ active: discreteToggle.checked })
+            })
+            .catch(err => console.error('Failed to toggle discrete analysis:', err));
         });
 
         setInterval(function() {
@@ -241,9 +270,11 @@
                     framesAnalyzedCounter.innerText = data.frames_analyzed;
                     fpsCounter.innerHTML = data.fps + ' <span style="font-size:1rem;">fps</span>';
                     // Reflects ground truth -- setting .checked programmatically does not
-                    // re-fire 'change', so this can't loop back into the toggle handler.
+                    // re-fire 'change', so this can't loop back into the toggle handlers.
                     analysisToggle.checked = data.analysis_active;
                     analysisStatusText.innerText = data.analysis_active ? '(on)' : '(off)';
+                    discreteToggle.checked = data.discrete_active;
+                    discreteStatusText.innerText = data.discrete_active ? '(pending)' : '(off)';
                 });
         }, 1000);
 
