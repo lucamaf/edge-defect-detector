@@ -21,6 +21,16 @@ else
         --user "$AMQ_USER" --password "$AMQ_PASSWORD" \
         --host 0.0.0.0 --http-host 0.0.0.0 \
         --force
+
+    # "--http-host 0.0.0.0" makes `artemis create` seed the console's CORS allowlist with
+    # <allow-origin>*://0.0.0.0*</allow-origin> -- but no browser ever actually visits
+    # http://0.0.0.0:8161 (that's a bind-all address, not a real client origin), so with
+    # <strict-checking/> enabled this rejects every real request with a 403 ("Origin ...
+    # is not allowed to call this agent"), and the Hawtio console loads but stays blank.
+    # Broadening it to a full wildcard matches this repo's existing trust model (anonymous
+    # MQTT, no TLS anywhere) rather than guessing at a specific origin/subnet to allow.
+    sed -i 's|<allow-origin>\*://0.0.0.0\*</allow-origin>|<allow-origin>*</allow-origin>|' \
+        broker/etc/jolokia-access.xml
 fi
 
 exec broker/bin/artemis run
