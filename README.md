@@ -253,7 +253,33 @@ Make sure to start first the MQTT broker (either natively or containerized like 
 podman run -d  --replace --privileged --name mosquitto -p 1883:1883 -v "$PWD/mosquitto/config:/mosquitto/config" -v "$PWD/mosquitto/data:/mosquitto/data" -v "$PWD/mosquitto/log:/mosquitto/log" docker.io/library/eclipse-mosquitto
 ```
 
-Should you want to check that the mqtt broker is running fine, connect remotely or locally using MQTT Explorer and subscribe to system topic tree: `$SYS\#`  
+Should you want to check that the mqtt broker is running fine, connect remotely or locally using MQTT Explorer and subscribe to system topic tree: `$SYS\#`
+
+#### Alternative MQTT Broker: ActiveMQ Artemis (ArkMQ)
+
+If you'd rather run [Apache ActiveMQ Artemis](https://activemq.apache.org/components/artemis/) (via the [ArkMQ](https://github.com/arkmq-org) community broker image) instead of Mosquitto, it's a drop-in replacement -- `app.py` just talks plain MQTT on `MQTT_BROKER`/`MQTT_PORT`, so it doesn't care which broker is on the other end. This mirrors a setup already validated with podman on another project, adapted here as a single container.
+
+> **_NOTE:_** The image's default entrypoint only creates the broker instance if its data directory doesn't already exist -- but podman pre-creates that directory as soon as a volume is mounted there, even empty, which tricks it into skipping creation and crash-looping. [`amq-artemis/entrypoint.sh`](amq-artemis/entrypoint.sh) works around this by checking for the actual `artemis` binary instead, so it only creates the instance once, on first run against an empty volume.
+
+```bash
+mkdir -p amq-artemis/data
+# The image runs as a non-root user (jboss) in the "root" group (gid 0). Without this,
+# the first run fails with "The path 'broker' is not writable." since a freshly
+# mkdir'd directory isn't group-writable by default.
+chmod 775 amq-artemis/data
+podman run -d --replace --name artemis \
+    -p 1883:1883 \
+    -p 8161:8161 \
+    -v "$PWD/amq-artemis/data:/home/jboss/broker:Z" \
+    -v "$PWD/amq-artemis/entrypoint.sh:/entrypoint.sh:Z" \
+    -e AMQ_USER=admin \
+    -e AMQ_PASSWORD=password \
+    --entrypoint /bin/sh \
+    quay.io/arkmq-org/arkmq-org-broker:latest /entrypoint.sh
+```
+
+Port `1883` is MQTT (same as Mosquitto); `8161` is Artemis's web console (`http://<host>:8161`, log in with `AMQ_USER`/`AMQ_PASSWORD`) for inspecting queues/connections. Data persists in `amq-artemis/data` across container restarts. MQTT clients connect anonymously (`--allow-anonymous`), matching Mosquitto's `allow_anonymous true` -- change `AMQ_USER`/`AMQ_PASSWORD` before using this beyond a lab setup, since they only guard the admin console, not MQTT pub/sub.
+
 Now you can run the python app containerized (the following is the command that leverages **Nvidia GPU** and the `defect-detector-jetson` built image). 
 > **_NOTE:_** The model is injected at runtime and not build time, so that you can switch the model quickly, without rebuilding.  
 

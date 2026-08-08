@@ -198,3 +198,4 @@ cython_debug/
 .claude
 dataset/
 mosquitto/config/mosquitto.passwd
+amq-artemis/data/
