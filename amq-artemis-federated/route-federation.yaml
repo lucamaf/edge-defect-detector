@@ -1,0 +1,21 @@
+# TLS passthrough so the raw CORE-protocol bytes reach the broker's TLS acceptor
+# undecrypted -- the router can't terminate TLS for a non-HTTP protocol, it can only
+# route by the SNI hostname in the ClientHello. No `host:` pinned here; OpenShift
+# auto-assigns one (<name>-<namespace>.<cluster's default ingress domain>). Run
+# `oc get route artemis-federated -o jsonpath='{.spec.host}'` after applying this to
+# find it -- you need that exact hostname to generate a matching certificate (see
+# README.md in this folder).
+apiVersion: route.openshift.io/v1
+kind: Route
+metadata:
+  name: artemis-federated
+  labels:
+    app: artemis-federated
+spec:
+  to:
+    kind: Service
+    name: artemis-federated
+  port:
+    targetPort: federation-tls
+  tls:
+    termination: passthrough

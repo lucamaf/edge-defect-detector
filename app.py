@@ -43,7 +43,10 @@ frames_analyzed = 0
 # Timestamps of the last N analyzed frames, used to compute a rolling FPS.
 analysis_frame_times = deque(maxlen=30)
 # for newer versions of paho-mqtt, use CallbackAPIVersion
-mqtt_client = mqtt.Client(client_id="defect_detection_client")
+# clean_session=False so the broker queues any messages for our subscription while we're
+# briefly disconnected, instead of dropping them -- required alongside qos=2 to actually
+# avoid missed messages, not just duplicate/out-of-order ones.
+mqtt_client = mqtt.Client(client_id="defect_detection_client", clean_session=False)
 camera_lock = threading.Lock()  # To safely handle camera object access
 upload_jobs = {} # Dictionary to store status of background jobs
 
@@ -112,7 +115,7 @@ def publish_discrete_result(defective, confidence, piece):
         'timestamp': datetime.now().isoformat(timespec='seconds'),
         'piece': piece,
     })
-    mqtt_client.publish(MQTT_TOPIC_RESULTS, payload)
+    mqtt_client.publish(MQTT_TOPIC_RESULTS, payload, qos=2)
 
 def create_message_frame(message):
     """Creates a black frame with a text message."""
@@ -170,7 +173,7 @@ def generate_frames():
                         
                         status_message = f"Recording started: {filepath}"
                         print(status_message)
-                        mqtt_client.publish(MQTT_TOPIC_STATUS, status_message)
+                        mqtt_client.publish(MQTT_TOPIC_STATUS, status_message, qos=2)
 
                     except Exception as e:
                         print(f"Error starting video writer: {e}")
@@ -186,7 +189,7 @@ def generate_frames():
                 video_writer = None
                 status_message = "Recording stopped."
                 print(status_message)
-                mqtt_client.publish(MQTT_TOPIC_STATUS, status_message)
+                mqtt_client.publish(MQTT_TOPIC_STATUS, status_message, qos=2)
         # If continuous analysis is active, perform detection on every frame
         if analysis_active and get_model():
             yolo_model = get_model()
@@ -206,7 +209,7 @@ def generate_frames():
             piece_counter += 1
             publish_discrete_result(current_defects > 0, max_confidence, piece_counter)
             discrete_requested = False
-            mqtt_client.publish(MQTT_TOPIC_STATUS, "Discrete analysis complete")
+            mqtt_client.publish(MQTT_TOPIC_STATUS, "Discrete analysis complete", qos=2)
 
         # encode and yield the frame for streaming 
         ret, buffer = cv2.imencode('.jpg', frame)
@@ -402,7 +405,7 @@ def toggle_analysis():
     if mqtt_client.is_connected():
         # Publish the same control message an external MQTT client would send, so
         # on_message() stays the single place that flips analysis_active.
-        mqtt_client.publish(MQTT_TOPIC_CONTROL, command)
+        mqtt_client.publish(MQTT_TOPIC_CONTROL, command, qos=2)
     else:
         # Broker unreachable: fall back to toggling locally so the switch still works.
         analysis_active = active
@@ -422,7 +425,7 @@ def toggle_discrete():
     if mqtt_client.is_connected():
         # Publish the same control message an external MQTT client would send, so
         # on_message() stays the single place that flips discrete_requested.
-        mqtt_client.publish(MQTT_TOPIC_CONTROL, command)
+        mqtt_client.publish(MQTT_TOPIC_CONTROL, command, qos=2)
     else:
         # Broker unreachable: fall back to toggling locally so the switch still works.
         if active:
@@ -435,8 +438,8 @@ def toggle_discrete():
 def on_connect(client, userdata, flags, rc):
     if rc == 0:
         print("Connected to MQTT Broker!")
-        client.subscribe(MQTT_TOPIC_CONTROL)
-        client.publish(MQTT_TOPIC_STATUS, "Detector online")
+        client.subscribe(MQTT_TOPIC_CONTROL, qos=2)
+        client.publish(MQTT_TOPIC_STATUS, "Detector online", qos=2)
     else:
         print(f"Failed to connect, return code {rc}\n")
 
@@ -447,17 +450,17 @@ def on_message(client, userdata, msg):
     if payload == "start":
         analysis_active = True
         discrete_requested = False  # mutually exclusive with discrete mode
-        client.publish(MQTT_TOPIC_STATUS, "Analysis started")
+        client.publish(MQTT_TOPIC_STATUS, "Analysis started", qos=2)
     elif payload == "stop":
         analysis_active = False
-        client.publish(MQTT_TOPIC_STATUS, "Analysis stopped")
+        client.publish(MQTT_TOPIC_STATUS, "Analysis stopped", qos=2)
     elif payload == "discrete-on":
         analysis_active = False  # mutually exclusive with continuous mode
         discrete_requested = True
-        client.publish(MQTT_TOPIC_STATUS, "Discrete analysis requested")
+        client.publish(MQTT_TOPIC_STATUS, "Discrete analysis requested", qos=2)
     elif payload == "discrete-off":
         discrete_requested = False
-        client.publish(MQTT_TOPIC_STATUS, "Discrete analysis cancelled")
+        client.publish(MQTT_TOPIC_STATUS, "Discrete analysis cancelled", qos=2)
     # recording MQTT Commands
     elif payload == "start_recording":
         with recording_lock:

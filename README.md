@@ -261,6 +261,8 @@ If you'd rather run [Apache ActiveMQ Artemis](https://activemq.apache.org/compon
 
 > **_NOTE:_** The image's default entrypoint only creates the broker instance if its data directory doesn't already exist -- but podman pre-creates that directory as soon as a volume is mounted there, even empty, which tricks it into skipping creation and crash-looping. [`amq-artemis/entrypoint.sh`](amq-artemis/entrypoint.sh) works around this by checking for the actual `artemis` binary instead, so it only creates the instance once, on first run against an empty volume.
 
+> **_NOTE:_** Since this runs as a *rootless* container (no `sudo`), it's tied to your user's systemd session. Without lingering enabled, the container gets a clean shutdown the moment your last login session for that user ends (SSH disconnect/timeout, or a plain `exit`) -- `-d` only detaches from the terminal, it doesn't survive the session itself going away. Run this once so it keeps running independently of any active login: `sudo loginctl enable-linger $(whoami)`.
+
 ```bash
 mkdir -p amq-artemis/data
 # The image runs as a non-root user (jboss) in the "root" group (gid 0). Without this,
@@ -281,6 +283,19 @@ podman run -d --replace --name artemis \
 Port `1883` is MQTT (same as Mosquitto); `8161` is Artemis's web console (`http://<host>:8161`, log in with `AMQ_USER`/`AMQ_PASSWORD`) for inspecting queues/connections. Data persists in `amq-artemis/data` across container restarts. MQTT clients connect anonymously (`--allow-anonymous`), matching Mosquitto's `allow_anonymous true` -- change `AMQ_USER`/`AMQ_PASSWORD` before using this beyond a lab setup, since they only guard the admin console, not MQTT pub/sub.
 
 > **_NOTE:_** If the console logs in but shows nothing besides the Hawtio logo (blank, no nav/plugins), it's because `--http-host 0.0.0.0` makes `artemis create` seed the console's CORS allowlist (`etc/jolokia-access.xml`) with `<allow-origin>*://0.0.0.0*</allow-origin>` -- which no real browser origin ever matches, so every request gets rejected with a 403 once `<strict-checking/>` kicks in. `entrypoint.sh` broadens this to `<allow-origin>*</allow-origin>` automatically on first create, matching this setup's existing anonymous/no-TLS trust model. If you're fixing an already-created instance (data volume predates this fix), patch it directly: `sed -i 's|<allow-origin>\*://0.0.0.0\*</allow-origin>|<allow-origin>*</allow-origin>|' amq-artemis/data/etc/jolokia-access.xml && podman restart artemis`.
+
+#### Mirroring results to OpenShift for higher-level analysis
+
+`amq-artemis` can optionally mirror `defect_detection/results` to a second Artemis broker running on OpenShift (e.g. a single-node cluster that isn't on all day), so it's available for higher-level analysis without needing that cluster to be reachable all the time. Set these on the edge `podman run` command to enable it:
+
+```bash
+-e FEDERATION_HOST=<openshift-route-hostname> \
+-e FEDERATION_PORT=443 \
+-e FEDERATION_TRUSTSTORE_PASSWORD=<truststore-password> \
+-v "$(pwd)/federation-truststore.p12:/etc/artemis-federation-tls/truststore.p12:Z" \
+```
+
+Full setup for the OpenShift side (manifests, TLS certificate generation, verification steps) is in [`amq-artemis-federated/README.md`](amq-artemis-federated/README.md). Short version of how it works: a Core Bridge (not Artemis Federation -- the broker image doesn't ship that module) queues messages durably on this side whenever the OpenShift broker is unreachable, and flushes them automatically once it reconnects, with no message loss. Verified this end-to-end locally (live forwarding, offline queuing, reconnect flush) before writing the config.
 
 Now you can run the python app containerized (the following is the command that leverages **Nvidia GPU** and the `defect-detector-jetson` built image). 
 > **_NOTE:_** The model is injected at runtime and not build time, so that you can switch the model quickly, without rebuilding.  

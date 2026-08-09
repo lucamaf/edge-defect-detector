@@ -1,0 +1,150 @@
+# ArkMQ Broker (quay.io/arkmq-org/arkmq-org-broker), packaging Apache ActiveMQ Artemis.
+# This is the OpenShift-side federation TARGET for edge-defect-detector's
+# amq-artemis (edge broker): the edge broker mirrors defect_detection/results here via
+# a Core Bridge, tolerant of this broker being intermittently offline (e.g. a
+# single-node OpenShift cluster that isn't on all day) -- messages queue durably on the
+# edge side and flush automatically once this broker is reachable again. Verified this
+# whole flow locally with podman before writing this manifest: live forwarding, and the
+# actual point of it, queuing-while-offline with no message loss on reconnect.
+#
+# The initContainer/guard pattern mirrors amq-artemis/entrypoint.sh in this same repo --
+# see that file's comments for why `artemis create` can't just be the image's default
+# entrypoint when a volume is pre-mounted.
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: artemis-federated
+  labels:
+    app: artemis-federated
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: artemis-federated
+  template:
+    metadata:
+      labels:
+        app: artemis-federated
+    spec:
+      securityContext:
+        # No fsGroup pinned here: OpenShift's restricted-v2/v3 SCCs only allow an
+        # fsGroup from the namespace's own auto-allocated supplemental-group range, and
+        # leaving it unset lets the SCC auto-assign a valid one (still applied to the
+        # PVC and the container process the same way a pinned value would be).
+        runAsNonRoot: true
+        seccompProfile:
+          type: RuntimeDefault
+      initContainers:
+        - name: artemis-init
+          image: quay.io/arkmq-org/arkmq-org-broker:latest
+          workingDir: /home/jboss
+          command: ["sh", "-c"]
+          args:
+            - |
+              if [ -x broker/bin/artemis ]; then
+                echo "Broker instance already present in the data volume, skipping create"
+                exit 0
+              fi
+              /opt/amq/bin/artemis create broker \
+                --role admin --name broker \
+                --allow-anonymous \
+                --user "$AMQ_USER" --password "$AMQ_PASSWORD" \
+                --host 0.0.0.0 --http-host 0.0.0.0 \
+                --force
+
+              # The edge-side Core Bridge does a pre-flight query against THIS broker for
+              # the forwarding address's bindings before it will ever report
+              # Connected=true. auto-create-address does NOT satisfy this (it only fires
+              # on an actual send, not a query) -- so the address+queue must already
+              # exist here. Verified locally: without this the bridge sits at
+              # Connected=false forever, retrying AMQ222097 ("does not have any
+              # bindings") in a loop.
+              sed -i 's|</addresses>|   <address name="defect_detection.results"><multicast><queue name="results.queue"/></multicast></address>\n   </addresses>|' broker/etc/broker.xml
+
+              # Jolokia/Hawtio console CORS: `--http-host 0.0.0.0` seeds the console's
+              # allowlist with <allow-origin>*://0.0.0.0*</allow-origin>, which no real
+              # browser origin ever matches, so with <strict-checking/> enabled every
+              # real request gets rejected with a 403 and the console loads blank.
+              sed -i 's|<allow-origin>\*://0.0.0.0\*</allow-origin>|<allow-origin>*</allow-origin>|' broker/etc/jolokia-access.xml
+
+              # TLS acceptor for the federation link. A plain CORE acceptor (like the
+              # default 61616 one) can't be exposed through an OpenShift passthrough
+              # Route, since the router can't decrypt non-HTTP traffic to inspect/route
+              # it -- passthrough Routes require the backend itself to terminate TLS.
+              # Keystore comes from the artemis-federation-tls secret (see README.md in
+              # this folder for how to generate it against the Route's actual hostname).
+              sed -i 's|</acceptors>|         <acceptor name="federation-ssl">tcp://0.0.0.0:61617?tcpSendBufferSize=1048576;tcpReceiveBufferSize=1048576;protocols=CORE;useEpoll=true;sslEnabled=true;keyStorePath=/etc/artemis-federation-tls/keystore.p12;keyStoreType=PKCS12;keyStorePassword=${FEDERATION_KEYSTORE_PASSWORD}</acceptor>\n      </acceptors>|' broker/etc/broker.xml
+          env:
+            - name: AMQ_USER
+              valueFrom:
+                secretKeyRef:
+                  name: artemis-credentials
+                  key: AMQ_USER
+            - name: AMQ_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: artemis-credentials
+                  key: AMQ_PASSWORD
+            - name: FEDERATION_KEYSTORE_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: artemis-federation-tls
+                  key: password
+          volumeMounts:
+            - name: data
+              mountPath: /home/jboss/broker
+          securityContext:
+            allowPrivilegeEscalation: false
+            capabilities:
+              drop:
+                - ALL
+      containers:
+        - name: artemis
+          image: quay.io/arkmq-org/arkmq-org-broker:latest
+          ports:
+            - containerPort: 61617
+            - containerPort: 8161
+          env:
+            - name: AMQ_USER
+              valueFrom:
+                secretKeyRef:
+                  name: artemis-credentials
+                  key: AMQ_USER
+            - name: AMQ_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: artemis-credentials
+                  key: AMQ_PASSWORD
+            - name: FEDERATION_KEYSTORE_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: artemis-federation-tls
+                  key: password
+          volumeMounts:
+            - name: data
+              mountPath: /home/jboss/broker
+            - name: federation-tls
+              mountPath: /etc/artemis-federation-tls
+              readOnly: true
+          securityContext:
+            allowPrivilegeEscalation: false
+            capabilities:
+              drop:
+                - ALL
+          readinessProbe:
+            tcpSocket:
+              port: 61617
+            initialDelaySeconds: 20
+            periodSeconds: 10
+          livenessProbe:
+            tcpSocket:
+              port: 61617
+            initialDelaySeconds: 25
+            periodSeconds: 15
+      volumes:
+        - name: data
+          persistentVolumeClaim:
+            claimName: artemis-federated-data
+        - name: federation-tls
+          secret:
+            secretName: artemis-federation-tls

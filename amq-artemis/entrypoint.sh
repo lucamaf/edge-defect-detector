@@ -31,6 +31,37 @@ else
     # MQTT, no TLS anywhere) rather than guessing at a specific origin/subnet to allow.
     sed -i 's|<allow-origin>\*://0.0.0.0\*</allow-origin>|<allow-origin>*</allow-origin>|' \
         broker/etc/jolokia-access.xml
+
+    # Optional: mirror defect_detection/results to a remote broker (e.g. on OpenShift SNO)
+    # for higher-level analysis, tolerant of that broker being intermittently offline.
+    # Opt-in via FEDERATION_HOST so a plain local broker isn't left with a bridge
+    # endlessly retrying a target that was never configured.
+    #
+    # This uses a Core Bridge, not Artemis Federation -- the arkmq-org-broker image does
+    # not ship the federation module at all (verified: no federation-related class/jar
+    # anywhere in the image), despite broker.xml schema validation silently accepting
+    # <federations> config that then does nothing at runtime. Core Bridges are a base
+    # artemis-server feature and were verified end-to-end locally: live forwarding, and
+    # -- the actual point of this -- messages queue durably here while the target is
+    # unreachable and flush automatically once it reconnects, with no message loss.
+    #
+    # IMPORTANT: the bridge does a pre-flight query against the remote broker for the
+    # forwarding-address's bindings before it will ever report Connected=true. auto-create
+    # on the remote does NOT satisfy this (auto-create only fires on an actual send, not a
+    # query) -- the remote side needs "defect_detection.results" pre-created as a MULTICAST
+    # address with a queue bound to it. See the OpenShift-side manifests for that.
+    if [ -n "$FEDERATION_HOST" ]; then
+        FEDERATION_PORT="${FEDERATION_PORT:-443}"
+
+        sed -i "s|<acceptors>|<connectors>\n         <connector name=\"federation-connector\">tcp://${FEDERATION_HOST}:${FEDERATION_PORT}?sslEnabled=true;trustStorePath=/etc/artemis-federation-tls/truststore.p12;trustStorePassword=${FEDERATION_TRUSTSTORE_PASSWORD};trustStoreType=PKCS12</connector>\n      </connectors>\n\n      <acceptors>|" \
+            broker/etc/broker.xml
+
+        sed -i "s|</acceptors>|</acceptors>\n\n      <bridges>\n         <bridge name=\"results-bridge\">\n            <queue-name>federation.results.queue</queue-name>\n            <forwarding-address>defect_detection.results</forwarding-address>\n            <routing-type>MULTICAST</routing-type>\n            <static-connectors>\n               <connector-ref>federation-connector</connector-ref>\n            </static-connectors>\n            <user>${AMQ_USER}</user>\n            <password>${AMQ_PASSWORD}</password>\n         </bridge>\n      </bridges>|" \
+            broker/etc/broker.xml
+
+        sed -i "s|</addresses>|   <address name=\"defect_detection.results\">\n         <multicast>\n            <queue name=\"federation.results.queue\"/>\n         </multicast>\n      </address>\n\n   </addresses>|" \
+            broker/etc/broker.xml
+    fi
 fi
 
 exec broker/bin/artemis run
