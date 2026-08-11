@@ -341,24 +341,36 @@ Once the USB camera is selected and streaming you can enable the real-time model
 This works likes an ON/OFF button and behind that MQTT messages are being sent to enable and disable the detection.  
 
 
-### Controlling the app with MQTT
+### MQTT Topics summary
 
 You can control the real-time defect detection on the live video stream by publishing messages to the `defect_detection/control` MQTT topic.
 
 ![alt text](images/mqttx.png)
-TOPIC **defect_detection/control**  
+**TOPIC defect_detection/control**  
 - To start the analysis, publish the message: **start**
 - To stop the analysis, publish the message: **stop**
 
 You can use any MQTT client (e.g., MQTTX, mosquitto_pub) to send these commands. 
 Once started the application will also publish its status (*Detector online*, *Analysis started*, *Analysis stopped*) to the `defect_detection/status` topic.
 
-TOPIC **defect_detection/status**
+**TOPIC defect_detection/status**
 - view status of analysis  
 
 You can now also record video from the camera using specific messages to the `defect_detection/control` MQTT topic
 
-TOPIC **defect_detection/control**  
+**TOPIC defect_detection/results**
+Example of results:
+
+```json
+  {
+    "defective": true, 
+    "confidence": 0.829, 
+    "timestamp": "2026-08-11T13:37:32", 
+    "piece": 2
+  }
+```
+
+**TOPIC defect_detection/control**  
 - To start recording, publish: **start_recording**
 - To stop recording, publish: **stop_recording**
 
