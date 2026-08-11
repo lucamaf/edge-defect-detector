@@ -4,7 +4,7 @@ After=network-online.target artemis.service
 Wants=network-online.target artemis.service
 
 [Container]
-Image=localhost/defect-detector-jetson
+Image=quay.io/luferrar/sps:defect-detector-jetson
 ContainerName=my-detector
 PodmanArgs=--privileged
 SecurityLabelDisable=true
