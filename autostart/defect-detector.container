@@ -1,0 +1,29 @@
+[Unit]
+Description=AI Defect Detector app (Jetson GPU)
+After=network-online.target artemis.service
+Wants=network-online.target artemis.service
+
+[Container]
+Image=localhost/defect-detector-jetson
+ContainerName=my-detector
+PodmanArgs=--privileged
+SecurityLabelDisable=true
+AddDevice=nvidia.com/gpu=all
+AddDevice=/dev/video1
+ShmSize=1g
+PublishPort=5000:5000
+Volume=/home/redhat/edge-defect-detector/models:/app/models
+Environment=MQTT_BROKER=192.168.100.245
+Environment=MQTT_PORT=1883
+Environment=FLASK_WEB_PORT=5000
+Environment=MODEL_PATH=/app/models/best.pt
+
+[Service]
+# GPU/USB devices and CDI generation need a moment to settle at boot.
+ExecStartPre=/bin/sleep 10
+Restart=always
+TimeoutStartSec=900
+RestartSec=30
+
+[Install]
+WantedBy=multi-user.target

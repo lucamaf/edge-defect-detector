@@ -182,16 +182,19 @@ Since `podman build`/`podman run` on the Jetson just read whatever is on disk in
 
 ### How to start everything automatically at system boot
 
-See the created files in the folder [autostart](https://github.com/lucamaf/edge-defect-detector/tree/main/autostart).
-You will find 2 systemd user services created based on the running **mosquitto** and **mqttx** containers and another service dedicated to launching the python application.
+See the files in the [autostart](https://github.com/lucamaf/edge-defect-detector/tree/main/autostart) folder: two [Podman Quadlet](https://docs.podman.io/en/latest/markdown/podman-systemd.unit.5.html) `.container` units, `artemis.container` and `defect-detector.container`, generating equivalent systemd services for the Artemis broker and the detector app respectively. `defect-detector.container` depends on `artemis.service` via `After=`/`Wants=`, so ordering is handled automatically.
 
-The priority is already set in the systemd definition so that:
+Both are **system**-level units (not user-level like the old setup) -- required for the detector container's `--privileged`/GPU device access, which only works with rootful Podman. Running Artemis as a system unit too avoids the rootless-session teardown issue (`loginctl enable-linger`) that ad-hoc `podman run` hit earlier, since root system services aren't tied to any login session.
 
-1. mosquitto
-2. mqttx
-3. python-defect-app
+To install:
 
-Making sure the dependecies are correct between the 3 applications.
+```bash
+sudo cp autostart/*.container /etc/containers/systemd/
+sudo systemctl daemon-reload
+sudo systemctl enable --now artemis.service defect-detector.service
+```
+
+The `Volume=` paths in both units are hardcoded to `/home/redhat/edge-defect-detector` -- edit them first if your checkout lives elsewhere. Check status/logs the normal systemd way, e.g. `systemctl status defect-detector.service` / `journalctl -u artemis.service -f`.
 
 ### Configuration
 

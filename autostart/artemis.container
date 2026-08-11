@@ -1,0 +1,24 @@
+[Unit]
+Description=ActiveMQ Artemis MQTT broker (ArkMQ)
+After=network-online.target
+Wants=network-online.target
+
+[Container]
+Image=quay.io/arkmq-org/arkmq-org-broker:latest
+ContainerName=artemis
+Entrypoint=/bin/sh
+Exec=/entrypoint.sh
+PublishPort=1883:1883
+PublishPort=8161:8161
+Volume=/home/redhat/edge-defect-detector/amq-artemis/data:/home/jboss/broker:Z
+Volume=/home/redhat/edge-defect-detector/amq-artemis/entrypoint.sh:/entrypoint.sh:Z
+Environment=AMQ_USER=admin
+Environment=AMQ_PASSWORD=password
+
+[Service]
+Restart=always
+TimeoutStartSec=300
+RestartSec=15
+
+[Install]
+WantedBy=multi-user.target
