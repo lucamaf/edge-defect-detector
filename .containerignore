@@ -43,3 +43,7 @@ training/
 
 #autostart with systemd services
 autostart/
+
+# exclude amq
+amq-artemis/
+amq-artemis-federated/
