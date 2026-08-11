@@ -282,6 +282,8 @@ podman run -d --replace --name artemis \
 
 Port `1883` is MQTT (same as Mosquitto); `8161` is Artemis's web console (`http://<host>:8161`, log in with `AMQ_USER`/`AMQ_PASSWORD`) for inspecting queues/connections. Data persists in `amq-artemis/data` across container restarts. MQTT clients connect anonymously (`--allow-anonymous`), matching Mosquitto's `allow_anonymous true` -- change `AMQ_USER`/`AMQ_PASSWORD` before using this beyond a lab setup, since they only guard the admin console, not MQTT pub/sub.
 
+> **_NOTE:_** Remember to open both ports on Firewall for remote access (`1883` `8161`) and to enable lingering user with: `$ loginctl enable-linger`
+
 > **_NOTE:_** If the console logs in but shows nothing besides the Hawtio logo (blank, no nav/plugins), it's because `--http-host 0.0.0.0` makes `artemis create` seed the console's CORS allowlist (`etc/jolokia-access.xml`) with `<allow-origin>*://0.0.0.0*</allow-origin>` -- which no real browser origin ever matches, so every request gets rejected with a 403 once `<strict-checking/>` kicks in. `entrypoint.sh` broadens this to `<allow-origin>*</allow-origin>` automatically on first create, matching this setup's existing anonymous/no-TLS trust model. If you're fixing an already-created instance (data volume predates this fix), patch it directly: `sed -i 's|<allow-origin>\*://0.0.0.0\*</allow-origin>|<allow-origin>*</allow-origin>|' amq-artemis/data/etc/jolokia-access.xml && podman restart artemis`.
 
 #### Mirroring results to OpenShift for higher-level analysis
