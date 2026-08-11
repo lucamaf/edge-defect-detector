@@ -266,6 +266,8 @@ If you'd rather run [Apache ActiveMQ Artemis](https://activemq.apache.org/compon
 
 > **_NOTE:_** Since this runs as a *rootless* container (no `sudo`), it's tied to your user's systemd session. Without lingering enabled, the container gets a clean shutdown the moment your last login session for that user ends (SSH disconnect/timeout, or a plain `exit`) -- `-d` only detaches from the terminal, it doesn't survive the session itself going away. Run this once so it keeps running independently of any active login: `sudo loginctl enable-linger $(whoami)`.
 
+> **_NOTE:_** This section is for ad-hoc/rootless testing. The [autostart](autostart/) Quadlet unit runs Artemis as **root** (system service, no user-session/linger issue) instead, which uses a *different* UID mapping: `jboss` (the image's user) is host UID 185 literally, not remapped through subuid ranges the way rootless podman does it. If you test rootless first with the command below and then switch to the quadlet, `amq-artemis/data`'s contents will be owned by the rootless-mapped UIDs and the rootful container won't be able to write to them (e.g. `log/audit.log (Permission denied)`) -- reown it for the new context: `sudo chown -R 185:0 amq-artemis/data`. Setting up the directory for the quadlet from scratch (no prior rootless run) needs the same ownership, not the `chmod 775` below: `sudo mkdir -p amq-artemis/data && sudo chown 185:0 amq-artemis/data`.
+
 ```bash
 mkdir -p amq-artemis/data
 # The image runs as a non-root user (jboss) in the "root" group (gid 0). Without this,
