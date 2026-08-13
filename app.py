@@ -17,7 +17,7 @@ from datetime import datetime
 app = Flask(__name__)
 
 # Disable Werkzeug request logs
-logging.getLogger('werkzeug').disabled = True
+#logging.getLogger('werkzeug').disabled = True
 
 
 # --- Configuration from Environment Variables with Defaults ---

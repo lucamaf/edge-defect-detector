@@ -354,7 +354,7 @@ You can control the real-time defect detection on the live video stream by publi
 **TOPIC defect_detection/control**  
 - To start the analysis, publish the message: **start**
 - To stop the analysis, publish the message: **stop**
-- To start discrete analysis (one frame), publish the message **discrete_active** (in this case it will automatically flip back to off after one frame analysis)
+- To start discrete analysis (one frame), publish the message **discrete-on** (in this case it will automatically flip back to off after one frame analysis)
 
 You can use any MQTT client (e.g., MQTTX, mosquitto_pub) to send these commands. 
 Once started the application will also publish its status (*Detector online*, *Analysis started*, *Analysis stopped*) to the `defect_detection/status` topic.
