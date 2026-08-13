@@ -210,6 +210,9 @@ The application is configured using environment variables. This is especially im
 | `FLASK_WEB_PORT`      | `5000`                         | The port on which the Flask web server will listen inside the container.                                  |
 | `RECORDING_PATH`      | `recordings`                   | The directory inside the container where recorded videos will be saved.                                 |
 | `VIDEO_FORMAT`        | `XVID`                         | The FourCC code for the video codec. `XVID` for `.avi` or `mp4v` for `.mp4`.                              |
+| `YOLO_CONF_THRESHOLD` | `0.25`                         | Global minimum confidence for a YOLO detection to be kept. Kept low by default so weak `Defect` detections aren't missed -- see `PIECE_MIN_CONFIDENCE` for why `Piece` has its own, stricter threshold instead of raising this one. |
+| `YOLO_IOU_THRESHOLD`  | `0.45`                         | NMS overlap threshold. Lower this if the model reports multiple overlapping boxes on what's actually a single piece/defect -- it makes NMS merge/suppress overlapping detections more aggressively. |
+| `PIECE_MIN_CONFIDENCE`| `0.5`                          | Separate, stricter confidence bar applied only to `Piece` detections (in `run_detection_on_frame`), to reject spurious/background piece detections without also raising the bar for `Defect`. Raise this if you're seeing multiple "pieces" detected when only one is actually in view. |
 
 ### How to Run the Application natively
 

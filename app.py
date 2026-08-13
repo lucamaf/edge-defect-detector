@@ -30,6 +30,13 @@ MQTT_TOPIC_RESULTS = os.environ.get("MQTT_TOPIC_RESULTS", "defect_detection/resu
 MODEL_PATH = os.environ.get("MODEL_PATH", "models/model.pt")
 FLASK_WEB_PORT = int(os.environ.get("FLASK_WEB_PORT", 5000))
 CAM_INDEX = os.environ.get("CAM_INDEX", "/dev/video0")
+# YOLO inference tuning. Kept low by default so weak "Defect" detections aren't missed --
+# PIECE_MIN_CONFIDENCE applies a separate, stricter bar just to "Piece" boxes (see
+# run_detection_on_frame), since a single global conf threshold can't serve both "catch
+# every faint defect" and "ignore spurious piece detections in the background" at once.
+YOLO_CONF_THRESHOLD = float(os.environ.get("YOLO_CONF_THRESHOLD", "0.25"))
+YOLO_IOU_THRESHOLD = float(os.environ.get("YOLO_IOU_THRESHOLD", "0.45"))
+PIECE_MIN_CONFIDENCE = float(os.environ.get("PIECE_MIN_CONFIDENCE", "0.5"))
 # Recording Configuration
 RECORDING_PATH = os.environ.get("RECORDING_PATH", "recordings")
 # FourCC is a 4-byte code used to specify the video codec.
@@ -119,17 +126,24 @@ def run_detection_on_frame(frame, yolo_model):
       - confidence: the defect box's confidence if any defects were found, else the
         piece box's confidence if a piece was found, else 0.0 if nothing was found
     """
-    results = yolo_model(frame, verbose=False)
+    results = yolo_model(frame, conf=YOLO_CONF_THRESHOLD, iou=YOLO_IOU_THRESHOLD, verbose=False)
     boxes = results[0].boxes
     piece_count = 0
     piece_confidence = 0.0
     defect_count = 0
     defect_confidence = 0.0
     for box in boxes:
-        x1, y1, x2, y2 = box.xyxy[0]
-        x1, y1, x2, y2 = int(x1), int(y1), int(x2), int(y2)
         class_name = yolo_model.names[int(box.cls)]
         confidence = box.conf.item()
+
+        # A single global conf threshold can't be both low enough to catch faint
+        # defects and high enough to reject spurious piece detections in the
+        # background -- apply the stricter, piece-specific bar here instead.
+        if class_name.lower() == "piece" and confidence < PIECE_MIN_CONFIDENCE:
+            continue
+
+        x1, y1, x2, y2 = box.xyxy[0]
+        x1, y1, x2, y2 = int(x1), int(y1), int(x2), int(y2)
         cv2.rectangle(frame, (x1, y1), (x2, y2), (0, 0, 255), 2)
         label = f"{class_name} {confidence:.2f}"
         cv2.putText(frame, label, (x1, y1 - 10),
@@ -318,7 +332,7 @@ def process_video_job(job_id, input_path):
                 break
 
             # Run YOLO detection
-            results = yolo_model(frame, verbose=False)
+            results = yolo_model(frame, conf=YOLO_CONF_THRESHOLD, iou=YOLO_IOU_THRESHOLD, verbose=False)
             annotated_frame = results[0].plot() # .plot() returns a NumPy array with boxes drawn
             writer.write(annotated_frame)
             
@@ -409,7 +423,7 @@ def upload_media():
 
     # --- IMAGE PROCESSING (remains the same) ---
     if filename.lower().endswith(('.png', '.jpg', '.jpeg')):
-        results = yolo_model(filepath)
+        results = yolo_model(filepath, conf=YOLO_CONF_THRESHOLD, iou=YOLO_IOU_THRESHOLD)
         os.makedirs('static', exist_ok=True)
 
         annotated_image = results[0].plot()
