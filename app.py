@@ -1,3 +1,5 @@
+import logging
+
 from flask import Flask, render_template, Response, request, jsonify
 import cv2
 from ultralytics import YOLO
@@ -13,6 +15,10 @@ from collections import deque
 from datetime import datetime
 
 app = Flask(__name__)
+
+# Disable Werkzeug request logs
+logging.getLogger('werkzeug').disabled = True
+
 
 # --- Configuration from Environment Variables with Defaults ---
 MQTT_BROKER = os.environ.get("MQTT_BROKER", "localhost")
