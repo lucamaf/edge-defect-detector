@@ -49,6 +49,12 @@ detected_defects = 0
 frames_analyzed = 0
 # Timestamps of the last N analyzed frames, used to compute a rolling FPS.
 analysis_frame_times = deque(maxlen=30)
+# Set once a frame has been successfully read from the current video source, so
+# acquisition gets logged once per source rather than on every frame.
+camera_acquired_logged = False
+# (piece_present, defective) from the last continuous-analysis frame, so results only
+# get logged on a state change instead of on every frame.
+last_analysis_state = None
 # for newer versions of paho-mqtt, use CallbackAPIVersion
 # clean_session=False so the broker queues any messages for our subscription while we're
 # briefly disconnected, instead of dropping them -- required alongside qos=2 to actually
@@ -100,24 +106,49 @@ def get_analysis_fps():
 #        camera = None
 
 def run_detection_on_frame(frame, yolo_model):
-    """Runs YOLO detection on a frame, draws boxes in-place, and returns (defect_count, max_confidence)."""
+    """Runs YOLO detection on a frame, draws boxes in-place.
+
+    The model has two classes: "Piece" (a piece is present under the camera) and
+    "Defect" (a defect was found on it). These are not the same thing -- a "Piece" box
+    with no "Defect" box means an inspected, good piece; no "Piece" box at all means
+    there's nothing there to inspect, which is a distinct state from "not defective".
+
+    Returns (piece_count, defect_count, confidence):
+      - piece_count: number of "Piece" boxes detected (0 means no piece under the camera)
+      - defect_count: number of "Defect" boxes detected
+      - confidence: the defect box's confidence if any defects were found, else the
+        piece box's confidence if a piece was found, else 0.0 if nothing was found
+    """
     results = yolo_model(frame, verbose=False)
     boxes = results[0].boxes
-    max_confidence = 0.0
+    piece_count = 0
+    piece_confidence = 0.0
+    defect_count = 0
+    defect_confidence = 0.0
     for box in boxes:
         x1, y1, x2, y2 = box.xyxy[0]
         x1, y1, x2, y2 = int(x1), int(y1), int(x2), int(y2)
+        class_name = yolo_model.names[int(box.cls)]
         confidence = box.conf.item()
         cv2.rectangle(frame, (x1, y1), (x2, y2), (0, 0, 255), 2)
-        label = f"{yolo_model.names[int(box.cls)]} {confidence:.2f}"
+        label = f"{class_name} {confidence:.2f}"
         cv2.putText(frame, label, (x1, y1 - 10),
                     cv2.FONT_HERSHEY_SIMPLEX, 0.5, (0, 0, 255), 2)
-        max_confidence = max(max_confidence, confidence)
-    return len(boxes), max_confidence
+        if class_name.lower() == "defect":
+            defect_count += 1
+            defect_confidence = max(defect_confidence, confidence)
+        elif class_name.lower() == "piece":
+            piece_count += 1
+            piece_confidence = max(piece_confidence, confidence)
 
-def publish_discrete_result(defective, confidence, piece):
+    confidence = defect_confidence if defect_count > 0 else (piece_confidence if piece_count > 0 else 0.0)
+    return piece_count, defect_count, confidence
+
+def publish_discrete_result(piece_count, defect_count, confidence, piece):
     payload = json.dumps({
-        'defective': defective,
+        'piece_present': piece_count > 0,
+        'piece_count': piece_count,
+        'defective': defect_count > 0,
         'confidence': round(confidence, 3),
         'timestamp': datetime.now().isoformat(timespec='seconds'),
         'piece': piece,
@@ -138,8 +169,8 @@ def create_message_frame(message):
 # includes recording logic
 def generate_frames():
     global analysis_active, detected_defects, video_writer, is_recording, frames_analyzed
-    global discrete_requested, piece_counter
-    
+    global discrete_requested, piece_counter, camera_acquired_logged, last_analysis_state
+
     while True:
         with camera_lock:
             if video_capture is None:                                # If recording was left on, stop it
@@ -149,6 +180,7 @@ def generate_frames():
                         video_writer = None
                     is_recording = False
 
+                camera_acquired_logged = False
                 frame_bytes = create_message_frame("No video source selected")
                 time.sleep(1) # Don't spam the client if no source
                 yield (b'--frame\r\n'
@@ -158,11 +190,16 @@ def generate_frames():
             success, frame = video_capture.read()
 
         if not success:
+            camera_acquired_logged = False
             frame_bytes = create_message_frame("Video stream disconnected or invalid")
             time.sleep(1) # Wait a moment before retrying
             yield (b'--frame\r\n'
                    b'Content-Type: image/jpeg\r\n\r\n' + frame_bytes + b'\r\n')
             continue
+
+        if not camera_acquired_logged:
+            app.logger.warning("Camera image is being acquired")
+            camera_acquired_logged = True
         
         # video recording logic
         with recording_lock:
@@ -200,21 +237,40 @@ def generate_frames():
         # If continuous analysis is active, perform detection on every frame
         if analysis_active and get_model():
             yolo_model = get_model()
-            current_defects, _ = run_detection_on_frame(frame, yolo_model)
-            detected_defects = current_defects
+            piece_count, defect_count, _ = run_detection_on_frame(frame, yolo_model)
+            detected_defects = defect_count
             frames_analyzed += 1
             analysis_frame_times.append(time.time())
+
+            state = (piece_count > 0, defect_count > 0)
+            if state != last_analysis_state:
+                if piece_count == 0:
+                    app.logger.warning("Analysis result: no piece under camera")
+                elif defect_count > 0:
+                    app.logger.warning(f"Analysis result: defective (defects={defect_count})")
+                else:
+                    app.logger.warning("Analysis result: piece OK, no defects")
+                last_analysis_state = state
 
         # A discrete request analyzes exactly one frame, then clears itself
         elif discrete_requested and get_model():
             yolo_model = get_model()
-            current_defects, max_confidence = run_detection_on_frame(frame, yolo_model)
-            detected_defects = current_defects
+            piece_count, defect_count, confidence = run_detection_on_frame(frame, yolo_model)
+            detected_defects = defect_count
             frames_analyzed += 1
             analysis_frame_times.append(time.time())
 
-            piece_counter += 1
-            publish_discrete_result(current_defects > 0, max_confidence, piece_counter)
+            if piece_count > 0:
+                piece_counter += 1
+                publish_discrete_result(piece_count, defect_count, confidence, piece_counter)
+                app.logger.warning(
+                    f"Discrete analysis result: piece={piece_counter} "
+                    f"defective={defect_count > 0} confidence={confidence:.3f}"
+                )
+            else:
+                publish_discrete_result(piece_count, defect_count, 0.0, None)
+                app.logger.warning("Discrete analysis result: no piece under camera")
+
             discrete_requested = False
             mqtt_client.publish(MQTT_TOPIC_STATUS, "Discrete analysis complete", qos=2)
 
@@ -308,16 +364,17 @@ def video_feed():
 
 @app.route('/select_source', methods=['POST'])
 def select_source():
-    global video_capture
+    global video_capture, camera_acquired_logged
     data = request.get_json()
     source_type = data.get('source')
     url = data.get('url')
-    
+
     with camera_lock:
         # Release the current capture if it exists
         if video_capture is not None:
             video_capture.release()
             video_capture = None
+        camera_acquired_logged = False
 
         if source_type == 'usb':
             # Use /dev/video0 for the default USB camera. This could also be made configurable.
@@ -496,6 +553,10 @@ if __name__ == '__main__':
     for d in ['uploads', 'static', RECORDING_PATH]:
         if not os.path.exists(d):
             os.makedirs(d)
+
+    # Default to the local USB camera so the live feed works without the user having
+    # to select/enable a source manually in the web UI first.
+    video_capture = cv2.VideoCapture(CAM_INDEX)
 
     mqtt_thread = threading.Thread(target=mqtt_thread_func)
     mqtt_thread.daemon = True
