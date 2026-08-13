@@ -16,8 +16,9 @@ from datetime import datetime
 
 app = Flask(__name__)
 
-# Disable Werkzeug request logs
-#logging.getLogger('werkzeug').disabled = True
+# Suppress Werkzeug's per-request access log (INFO) while still surfacing its own
+# warnings/errors, so REST endpoint calls stop showing up but real problems still do.
+logging.getLogger('werkzeug').setLevel(logging.WARNING)
 
 
 # --- Configuration from Environment Variables with Defaults ---
@@ -69,7 +70,7 @@ def get_model():
     if model is None:
         try:
             model = YOLO(MODEL_PATH)
-            app.logger.info(f"Successfully loaded YOLO model from {MODEL_PATH}")
+            app.logger.warning(f"Successfully loaded YOLO model from {MODEL_PATH}")
         except Exception:
             app.logger.exception(f"Error loading YOLO model from {MODEL_PATH}")
             # The app will continue to run, but analysis will not work.
@@ -178,11 +179,11 @@ def generate_frames():
                         video_writer = cv2.VideoWriter(filepath, fourcc, VIDEO_FPS, (w, h))
                         
                         status_message = f"Recording started: {filepath}"
-                        print(status_message)
+                        app.logger.warning(status_message)
                         mqtt_client.publish(MQTT_TOPIC_STATUS, status_message, qos=2)
 
-                    except Exception as e:
-                        print(f"Error starting video writer: {e}")
+                    except Exception:
+                        app.logger.exception("Error starting video writer")
                         is_recording = False # Stop recording attempt if it fails
                 
                 # If writer is active, write the frame
@@ -194,7 +195,7 @@ def generate_frames():
                 video_writer.release()
                 video_writer = None
                 status_message = "Recording stopped."
-                print(status_message)
+                app.logger.warning(status_message)
                 mqtt_client.publish(MQTT_TOPIC_STATUS, status_message, qos=2)
         # If continuous analysis is active, perform detection on every frame
         if analysis_active and get_model():
@@ -282,7 +283,7 @@ def process_video_job(job_id, input_path):
 
         upload_jobs[job_id]['status'] = 'complete'
         upload_jobs[job_id]['result_path'] = f'/static/{output_filename}'
-        app.logger.info(f"Job {job_id} completed. Output at {output_path}")
+        app.logger.warning(f"Job {job_id} completed. Output at {output_path}")
 
     except subprocess.CalledProcessError as e:
         app.logger.error(f"ffmpeg transcode failed for job {job_id}: {e.stderr}")
@@ -443,16 +444,16 @@ def toggle_discrete():
 
 def on_connect(client, userdata, flags, rc):
     if rc == 0:
-        print("Connected to MQTT Broker!")
+        app.logger.warning("Connected to MQTT Broker!")
         client.subscribe(MQTT_TOPIC_CONTROL, qos=2)
         client.publish(MQTT_TOPIC_STATUS, "Detector online", qos=2)
     else:
-        print(f"Failed to connect, return code {rc}\n")
+        app.logger.error(f"Failed to connect to MQTT broker, return code {rc}")
 
 def on_message(client, userdata, msg):
     global analysis_active, is_recording, discrete_requested
     payload = msg.payload.decode()
-    print(f"Received message on topic {msg.topic}: {payload}")
+    app.logger.warning(f"Received message on topic {msg.topic}: {payload}")
     if payload == "start":
         analysis_active = True
         discrete_requested = False  # mutually exclusive with discrete mode
@@ -486,8 +487,8 @@ def mqtt_thread_func():
     try:
         mqtt_client.connect(MQTT_BROKER, MQTT_PORT, 60)
         mqtt_client.loop_forever()
-    except Exception as e:
-        print(f"Could not connect to MQTT broker at {MQTT_BROKER}:{MQTT_PORT}. MQTT control will be disabled. Error: {e}")
+    except Exception:
+        app.logger.exception(f"Could not connect to MQTT broker at {MQTT_BROKER}:{MQTT_PORT}. MQTT control will be disabled.")
 
 
 if __name__ == '__main__':
