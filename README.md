@@ -330,7 +330,7 @@ sudo podman run -d --replace --privileged \
 
 ### Web Interface
 
-* **Video Source:** Select either "Local USB Camera" or "Web Stream". If you select Web Stream, an input field will appear for you to enter the stream URL. Click "Update Video Source" to activate it. The live feed will appear under "Live Feed Analysis". If you select "Local USB Camera" it will pickup the device you passthrough with the podman command, you might need to refresh the page to visualize the stream.  
+* **Video Source:** The local USB camera (device passed through with the podman command) is used by default at startup -- no need to select or enable it manually, the live feed under "Live Feed Analysis" just works. Use the dropdown only if you want to switch to a "Web Stream" instead (enter the stream URL, then click "Update Video Source").  
 * **Static Analysis:** Use the "Analyze Uploaded File" form to upload an image or a video.
     * **Images:** The result appears almost instantly.
     * **Videos:** A progress bar will appear. The application is processing the video in the background. Once complete, the annotated video will be displayed.
@@ -342,8 +342,8 @@ In my case port 1883 is open and reachable from the MQTT Explorer app.
 You can use the container MQTT Explorer application to send MQTT messages to the containerized mosquitto we started earlier.  
 
 ### Controlling the app with the GUI
-Once the USB camera is selected and streaming you can enable the real-time model with the switch you see at the top of the screen ![toggle](images/switch.png).  
-This works likes an ON/OFF button and behind that MQTT messages are being sent to enable and disable the detection.  
+With the USB camera streaming by default, you can enable the real-time model with the switch you see at the top of the screen ![toggle](images/switch.png), plus a second switch underneath it for discrete (single-frame) analysis -- the two are mutually exclusive.
+These work like ON/OFF buttons and behind them MQTT messages are being sent to enable and disable the detection, the same as publishing to `defect_detection/control` directly.  
 
 
 ### MQTT Topics summary
@@ -354,7 +354,8 @@ You can control the real-time defect detection on the live video stream by publi
 **TOPIC defect_detection/control**  
 - To start the analysis, publish the message: **start**
 - To stop the analysis, publish the message: **stop**
-- To start discrete analysis (one frame), publish the message **discrete-on** (in this case it will automatically flip back to off after one frame analysis)
+- To start discrete analysis (one frame), publish the message **discrete-on** (it automatically flips back to off after that one frame is analyzed)
+- To cancel a discrete analysis request before it's been consumed, publish: **discrete-off**
 
 You can use any MQTT client (e.g., MQTTX, mosquitto_pub) to send these commands. 
 Once started the application will also publish its status (*Detector online*, *Analysis started*, *Analysis stopped*) to the `defect_detection/status` topic.
@@ -365,14 +366,32 @@ Once started the application will also publish its status (*Detector online*, *A
 You can now also record video from the camera using specific messages to the `defect_detection/control` MQTT topic
 
 **TOPIC defect_detection/results**
-Example of results:
+
+Published once per discrete analysis (`discrete-on`). The model has two classes, `Piece` (a piece is present under the camera) and `Defect` (a defect was found on it) -- these are tracked separately, so an absent piece is its own distinct result rather than being reported as "not defective".
+
+Piece present, inspected:
 
 ```json
   {
-    "defective": true, 
-    "confidence": 0.829, 
-    "timestamp": "2026-08-11T13:37:32", 
+    "piece_present": true,
+    "piece_count": 1,
+    "defective": true,
+    "confidence": 0.829,
+    "timestamp": "2026-08-11T13:37:32",
     "piece": 2
+  }
+```
+
+No piece under the camera -- `piece` is `null` (it isn't counted as an inspected piece, so the progressive counter doesn't advance) and `confidence` is `0`:
+
+```json
+  {
+    "piece_present": false,
+    "piece_count": 0,
+    "defective": false,
+    "confidence": 0.0,
+    "timestamp": "2026-08-11T13:37:32",
+    "piece": null
   }
 ```
 
@@ -389,6 +408,8 @@ To view logs or stop the container:
 ```bash
 podman logs -f my-detector
 ```
+
+Flask's per-request access log (Werkzeug) is suppressed to warning level and above, so plain REST endpoint calls (`GET /get_defect_count`, polling, etc.) don't spam the log -- Werkzeug's own warnings/errors still show. The app's own meaningful events are logged at warning level, so you'll still see: camera acquisition (once per source, not per frame), analysis results on state change (piece OK / defective / no piece under camera) for continuous mode, each discrete analysis result, MQTT connect/disconnect and control messages received, and recording start/stop.
 
 ### Stop and remove the container
 
