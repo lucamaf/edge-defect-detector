@@ -35,8 +35,8 @@ CAM_INDEX = os.environ.get("CAM_INDEX", "/dev/video0")
 # run_detection_on_frame), since a single global conf threshold can't serve both "catch
 # every faint defect" and "ignore spurious piece detections in the background" at once.
 YOLO_CONF_THRESHOLD = float(os.environ.get("YOLO_CONF_THRESHOLD", "0.25"))
-YOLO_IOU_THRESHOLD = float(os.environ.get("YOLO_IOU_THRESHOLD", "0.45"))
-PIECE_MIN_CONFIDENCE = float(os.environ.get("PIECE_MIN_CONFIDENCE", "0.5"))
+YOLO_IOU_THRESHOLD = float(os.environ.get("YOLO_IOU_THRESHOLD", "0.3"))
+PIECE_MIN_CONFIDENCE = float(os.environ.get("PIECE_MIN_CONFIDENCE", "0.7"))
 # Recording Configuration
 RECORDING_PATH = os.environ.get("RECORDING_PATH", "recordings")
 # FourCC is a 4-byte code used to specify the video codec.
