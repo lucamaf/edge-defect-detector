@@ -378,7 +378,7 @@ def video_feed():
 
 @app.route('/select_source', methods=['POST'])
 def select_source():
-    global video_capture, camera_acquired_logged
+    global video_capture, camera_acquired_logged, is_recording, video_writer
     data = request.get_json()
     source_type = data.get('source')
     url = data.get('url')
@@ -389,6 +389,21 @@ def select_source():
             video_capture.release()
             video_capture = None
         camera_acquired_logged = False
+
+        # A source switch means the next frame comes from a different device/stream,
+        # possibly at a different resolution than the writer below was opened for --
+        # cv2.VideoWriter.write() with mismatched dimensions silently corrupts the file
+        # rather than erroring, so any in-progress recording must stop here rather than
+        # carry on into the new source.
+        with recording_lock:
+            if video_writer is not None:
+                video_writer.release()
+                video_writer = None
+            if is_recording:
+                is_recording = False
+                status_message = "Recording stopped (video source changed)."
+                app.logger.warning(status_message)
+                mqtt_client.publish(MQTT_TOPIC_STATUS, status_message, qos=2)
 
         if source_type == 'usb':
             # Use /dev/video0 for the default USB camera. This could also be made configurable.
@@ -469,6 +484,7 @@ def get_defect_count():
         'defect_count': detected_defects,
         'analysis_active': analysis_active,
         'discrete_active': discrete_requested,
+        'is_recording': is_recording,
         'frames_analyzed': frames_analyzed,
         'fps': round(get_analysis_fps(), 1),
     })
@@ -510,6 +526,28 @@ def toggle_discrete():
             analysis_active = False  # mutually exclusive with continuous mode
         discrete_requested = active
         app.logger.warning("MQTT broker not connected; toggled discrete analysis locally without publishing")
+
+    return jsonify({'status': 'ok', 'active': active})
+
+@app.route('/toggle_recording', methods=['POST'])
+def toggle_recording():
+    global is_recording
+    data = request.get_json(silent=True) or {}
+    active = bool(data.get('active'))
+    command = "start_recording" if active else "stop_recording"
+
+    if video_capture is None and active:
+        return jsonify({'status': 'error', 'message': 'No video source selected.'}), 400
+
+    if mqtt_client.is_connected():
+        # Publish the same control message an external MQTT client would send, so
+        # on_message() stays the single place that flips is_recording.
+        mqtt_client.publish(MQTT_TOPIC_CONTROL, command, qos=2)
+    else:
+        # Broker unreachable: fall back to toggling locally so the button still works.
+        with recording_lock:
+            is_recording = active
+        app.logger.warning("MQTT broker not connected; toggled recording locally without publishing")
 
     return jsonify({'status': 'ok', 'active': active})
 

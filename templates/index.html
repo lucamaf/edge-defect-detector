@@ -108,6 +108,13 @@
                         <span class="rh-switch-slider"></span>
                     </label>
                 </div>
+                <div class="rh-form-control rh-switch-control">
+                    <label for="recording-toggle">Recording <span id="recording-status-text" style="font-weight:400;color:var(--rh-gray-800);">(off)</span></label>
+                    <label class="rh-switch">
+                        <input type="checkbox" id="recording-toggle">
+                        <span class="rh-switch-slider"></span>
+                    </label>
+                </div>
                 <img id="video-stream" src="{{ url_for('video_feed') }}" alt="Live video feed.">
                 <div class="rh-stat-panel">
                     <div class="label">Defects Detected in Real-Time</div>
@@ -229,6 +236,8 @@
         const analysisStatusText = document.getElementById('analysis-status-text');
         const discreteToggle = document.getElementById('discrete-toggle');
         const discreteStatusText = document.getElementById('discrete-status-text');
+        const recordingToggle = document.getElementById('recording-toggle');
+        const recordingStatusText = document.getElementById('recording-status-text');
 
         analysisToggle.addEventListener('change', function() {
             if (analysisToggle.checked) {
@@ -259,6 +268,24 @@
             .catch(err => console.error('Failed to toggle discrete analysis:', err));
         });
 
+        recordingToggle.addEventListener('change', function() {
+            fetch('/toggle_recording', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ active: recordingToggle.checked })
+            })
+            .then(response => response.json())
+            .then(data => {
+                if (data.status === 'error') {
+                    // e.g. no video source selected -- revert the switch and let the
+                    // next poll re-sync it from server state either way.
+                    recordingToggle.checked = false;
+                    alert(data.message || 'Could not start recording.');
+                }
+            })
+            .catch(err => console.error('Failed to toggle recording:', err));
+        });
+
         setInterval(function() {
             const liveCounter = document.getElementById('defect-counter');
             const framesAnalyzedCounter = document.getElementById('frames-analyzed-counter');
@@ -275,6 +302,8 @@
                     analysisStatusText.innerText = data.analysis_active ? '(on)' : '(off)';
                     discreteToggle.checked = data.discrete_active;
                     discreteStatusText.innerText = data.discrete_active ? '(pending)' : '(off)';
+                    recordingToggle.checked = data.is_recording;
+                    recordingStatusText.innerText = data.is_recording ? '(on)' : '(off)';
                 });
         }, 1000);
 
