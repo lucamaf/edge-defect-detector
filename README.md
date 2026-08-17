@@ -213,6 +213,8 @@ The application is configured using environment variables. This is especially im
 | `YOLO_CONF_THRESHOLD` | `0.25`                         | Global minimum confidence for a YOLO detection to be kept. Kept low by default so weak `Defect` detections aren't missed -- see `PIECE_MIN_CONFIDENCE` for why `Piece` has its own, stricter threshold instead of raising this one. |
 | `YOLO_IOU_THRESHOLD`  | `0.45`                         | NMS overlap threshold. Lower this if the model reports multiple overlapping boxes on what's actually a single piece/defect -- it makes NMS merge/suppress overlapping detections more aggressively. |
 | `PIECE_MIN_CONFIDENCE`| `0.5`                          | Separate, stricter confidence bar applied only to `Piece` detections (in `run_detection_on_frame`), to reject spurious/background piece detections without also raising the bar for `Defect`. Raise this if you're seeing multiple "pieces" detected when only one is actually in view. |
+| `PIECE_CLASS_NAME`    | `Piece`                        | Which of the loaded model's classes means "the thing being inspected is present". Set this alongside `MODEL_PATH` when swapping in a differently-trained model -- e.g. `red-hat` for a pin-inspection model. Any class the model returns that isn't this or `DEFECT_CLASS_NAME` is ignored entirely (not drawn, not counted), so stray classes from a shared/reused base training run (e.g. `Airplane`, `Car`) never show up. |
+| `DEFECT_CLASS_NAME`   | `Defect`                       | Which of the loaded model's classes means "a defect was found on it". See `PIECE_CLASS_NAME` above -- e.g. `scratch` for a pin-inspection model. |
 
 ### How to Run the Application natively
 
@@ -319,6 +321,7 @@ sudo podman run -d --replace --privileged \
     -p 5000:5000 \
     --device /dev/video1:/dev/video1 \
     -v "$(pwd)/models":/app/models \
+    -v "$(pwd)/recordings":/app/recordings \
     -e MQTT_BROKER="192.168.100.245" \
     -e MQTT_PORT="1883" \
     -e FLASK_WEB_PORT="5000" \
@@ -327,6 +330,18 @@ sudo podman run -d --replace --privileged \
 ```
 
 (Replace 192.168.100.245 with your actual MQTT broker's IP address)
+
+> **_NOTE:_** Without the `recordings` volume mount, recorded videos land inside the container's own writable layer instead of the host -- not just hard to find, but permanently lost the next time the container is recreated (`--replace`, or every restart if run via the `autostart` Quadlet, which always runs with `--rm`).
+
+To run a differently-trained model instead -- e.g. `best-hat.pt`, a red-hat-pin/scratch inspection model trained on classes that don't match the metal-piece model's `Piece`/`Defect` naming (and which also has a couple of unrelated leftover classes, `Airplane`/`Car`, from a shared base training run) -- point `MODEL_PATH` at it and override `PIECE_CLASS_NAME`/`DEFECT_CLASS_NAME` to match its actual classes:
+
+```bash
+    -e MODEL_PATH="/app/models/best-hat.pt" \
+    -e PIECE_CLASS_NAME="red-hat" \
+    -e DEFECT_CLASS_NAME="scratch" \
+```
+
+The `Airplane`/`Car` classes are ignored automatically -- see `PIECE_CLASS_NAME` in the Configuration table above.
 
 - Step 4: Access Your Application  
   You can now open your web browser and navigate to http://<NVIDIA-DEVICE-IP-ADDRESS>:5000 to see your application running. Make sure to open port 5000 on the Nvidia jetson firewall.  

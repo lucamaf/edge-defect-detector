@@ -37,6 +37,15 @@ CAM_INDEX = os.environ.get("CAM_INDEX", "/dev/video0")
 YOLO_CONF_THRESHOLD = float(os.environ.get("YOLO_CONF_THRESHOLD", "0.25"))
 YOLO_IOU_THRESHOLD = float(os.environ.get("YOLO_IOU_THRESHOLD", "0.3"))
 PIECE_MIN_CONFIDENCE = float(os.environ.get("PIECE_MIN_CONFIDENCE", "0.7"))
+# Which of the model's classes represent "the thing being inspected is present" and
+# "a defect was found on it" -- configurable per model rather than hardcoded, so
+# swapping MODEL_PATH to a differently-trained model (different classes, e.g. a
+# "red-hat"/"scratch" pin-inspection model instead of "Piece"/"Defect") just needs
+# these two env vars alongside it. Any other class the model returns (e.g. stray
+# classes from a shared/reused base training run) is ignored entirely -- not drawn,
+# not counted.
+PIECE_CLASS_NAME = os.environ.get("PIECE_CLASS_NAME", "Piece")
+DEFECT_CLASS_NAME = os.environ.get("DEFECT_CLASS_NAME", "Defect")
 # Recording Configuration
 RECORDING_PATH = os.environ.get("RECORDING_PATH", "recordings")
 # FourCC is a 4-byte code used to specify the video codec.
@@ -53,6 +62,7 @@ discrete_requested = False
 # Progressive counter, incremented once per discrete analysis result.
 piece_counter = 0
 detected_defects = 0
+detected_pieces = 0
 frames_analyzed = 0
 # Timestamps of the last N analyzed frames, used to compute a rolling FPS.
 analysis_frame_times = deque(maxlen=30)
@@ -115,14 +125,18 @@ def get_analysis_fps():
 def run_detection_on_frame(frame, yolo_model):
     """Runs YOLO detection on a frame, draws boxes in-place.
 
-    The model has two classes: "Piece" (a piece is present under the camera) and
-    "Defect" (a defect was found on it). These are not the same thing -- a "Piece" box
-    with no "Defect" box means an inspected, good piece; no "Piece" box at all means
-    there's nothing there to inspect, which is a distinct state from "not defective".
+    Only two of the model's classes are meaningful here, named by PIECE_CLASS_NAME (the
+    thing being inspected is present) and DEFECT_CLASS_NAME (a defect was found on it) --
+    these are not the same thing, a presence box with no defect box means an inspected,
+    good piece, while no presence box at all means there's nothing there to inspect, a
+    distinct state from "not defective". Any other class the model returns (e.g. stray
+    classes from a shared/reused base training run) is ignored entirely: not drawn, not
+    counted, so it never shows up in the live feed or affects any result.
 
     Returns (piece_count, defect_count, confidence):
-      - piece_count: number of "Piece" boxes detected (0 means no piece under the camera)
-      - defect_count: number of "Defect" boxes detected
+      - piece_count: number of PIECE_CLASS_NAME boxes detected (0 means nothing under
+        the camera)
+      - defect_count: number of DEFECT_CLASS_NAME boxes detected
       - confidence: the defect box's confidence if any defects were found, else the
         piece box's confidence if a piece was found, else 0.0 if nothing was found
     """
@@ -135,11 +149,16 @@ def run_detection_on_frame(frame, yolo_model):
     for box in boxes:
         class_name = yolo_model.names[int(box.cls)]
         confidence = box.conf.item()
+        is_piece = class_name.lower() == PIECE_CLASS_NAME.lower()
+        is_defect = class_name.lower() == DEFECT_CLASS_NAME.lower()
+
+        if not (is_piece or is_defect):
+            continue
 
         # A single global conf threshold can't be both low enough to catch faint
         # defects and high enough to reject spurious piece detections in the
         # background -- apply the stricter, piece-specific bar here instead.
-        if class_name.lower() == "piece" and confidence < PIECE_MIN_CONFIDENCE:
+        if is_piece and confidence < PIECE_MIN_CONFIDENCE:
             continue
 
         x1, y1, x2, y2 = box.xyxy[0]
@@ -148,10 +167,10 @@ def run_detection_on_frame(frame, yolo_model):
         label = f"{class_name} {confidence:.2f}"
         cv2.putText(frame, label, (x1, y1 - 10),
                     cv2.FONT_HERSHEY_SIMPLEX, 0.5, (0, 0, 255), 2)
-        if class_name.lower() == "defect":
+        if is_defect:
             defect_count += 1
             defect_confidence = max(defect_confidence, confidence)
-        elif class_name.lower() == "piece":
+        else:
             piece_count += 1
             piece_confidence = max(piece_confidence, confidence)
 
@@ -182,7 +201,7 @@ def create_message_frame(message):
 # generate frames from the video capture 
 # includes recording logic
 def generate_frames():
-    global analysis_active, detected_defects, video_writer, is_recording, frames_analyzed
+    global analysis_active, detected_defects, detected_pieces, video_writer, is_recording, frames_analyzed
     global discrete_requested, piece_counter, camera_acquired_logged, last_analysis_state
 
     while True:
@@ -253,6 +272,7 @@ def generate_frames():
             yolo_model = get_model()
             piece_count, defect_count, _ = run_detection_on_frame(frame, yolo_model)
             detected_defects = defect_count
+            detected_pieces = piece_count
             frames_analyzed += 1
             analysis_frame_times.append(time.time())
 
@@ -271,6 +291,7 @@ def generate_frames():
             yolo_model = get_model()
             piece_count, defect_count, confidence = run_detection_on_frame(frame, yolo_model)
             detected_defects = defect_count
+            detected_pieces = piece_count
             frames_analyzed += 1
             analysis_frame_times.append(time.time())
 
@@ -482,6 +503,7 @@ def upload_status(job_id):
 def get_defect_count():
     return jsonify({
         'defect_count': detected_defects,
+        'piece_count': detected_pieces,
         'analysis_active': analysis_active,
         'discrete_active': discrete_requested,
         'is_recording': is_recording,

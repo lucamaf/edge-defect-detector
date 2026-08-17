@@ -116,9 +116,15 @@
                     </label>
                 </div>
                 <img id="video-stream" src="{{ url_for('video_feed') }}" alt="Live video feed.">
-                <div class="rh-stat-panel">
-                    <div class="label">Defects Detected in Real-Time</div>
-                    <div id="defect-counter" class="value">0</div>
+                <div class="rh-grid" style="grid-template-columns: 1fr 1fr;">
+                    <div class="rh-stat-panel">
+                        <div class="label">Pieces Detected in Real-Time</div>
+                        <div id="piece-counter" class="value">0</div>
+                    </div>
+                    <div class="rh-stat-panel">
+                        <div class="label">Defects Detected in Real-Time</div>
+                        <div id="defect-counter" class="value">0</div>
+                    </div>
                 </div>
             </section>
 
@@ -288,12 +294,14 @@
 
         setInterval(function() {
             const liveCounter = document.getElementById('defect-counter');
+            const livePieceCounter = document.getElementById('piece-counter');
             const framesAnalyzedCounter = document.getElementById('frames-analyzed-counter');
             const fpsCounter = document.getElementById('fps-counter');
             fetch('/get_defect_count')
                 .then(response => response.json())
                 .then(data => {
                     liveCounter.innerText = data.defect_count;
+                    livePieceCounter.innerText = data.piece_count;
                     framesAnalyzedCounter.innerText = data.frames_analyzed;
                     fpsCounter.innerHTML = data.fps + ' <span style="font-size:1rem;">fps</span>';
                     // Reflects ground truth -- setting .checked programmatically does not
