@@ -25,7 +25,7 @@ RUN dnf  --releasever=9.8 \
     --enablerepo=rhel-9-for-aarch64-appstream-rpms \
     --enablerepo=rhocp-4.22-for-rhel-9-aarch64-rpms \
     --enablerepo=fast-datapath-for-rhel-9-aarch64-rpms \
-    install -y NetworkManager-wifi iwl* git vim cockpit cockpit-podman firewalld lorax \
+    install -y NetworkManager-wifi iwl* git git-lfs vim cockpit cockpit-podman firewalld lorax \
     && dnf clean all
 
 # Install NVIDIA container toolkit
